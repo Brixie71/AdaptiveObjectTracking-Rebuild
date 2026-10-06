@@ -1,0 +1,33 @@
+# Adaptive Object Tracking Rebuild
+# Baseline: Windows + Python 3.11 x64
+#
+# IMPORTANT FOR NVIDIA/CUDA:
+# Install the correct PyTorch build from https://pytorch.org/get-started/locally/
+# BEFORE running `pip install -r requirements.txt`.
+# The versions below keep torch/torchvision paired. If a CUDA-enabled build of
+# these versions is already installed, pip should keep the compatible install.
+
+torch==2.14.1
+torchvision==0.29.1
+
+# Detection / computer vision
+ultralytics==8.4.158
+opencv-python==4.14.0.94
+numpy>=1.26,<3
+Pillow>=10,<13
+
+# Desktop UI
+PyQt5==5.15.11
+
+# Configuration / runtime
+PyYAML>=6,<7
+python-dotenv>=1,<2
+psutil>=5.9,<8
+
+# Model interchange / diagnostics
+onnx>=1.16,<2
+onnxruntime>=1.18,<2
+
+# Testing
+pytest>=8,<9
+pytest-qt>=4.4,<5
