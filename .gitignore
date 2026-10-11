@@ -12,6 +12,7 @@ runtime/
 logs/
 .vscode/
 .idea/
+.worktrees/
 models/**/*.pt
 models/**/*.onnx
 runs/
