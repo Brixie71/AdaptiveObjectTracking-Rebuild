@@ -1,6 +1,6 @@
 # Adaptive Object Tracking Rebuild Architecture Design
 
-**Status:** Approved conversational design, pending written-spec review
+**Status:** Approved
 
 **Date:** 2026-10-11
 
