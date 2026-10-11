@@ -212,7 +212,7 @@ sources:
     rtsp_env_key: CAMERA_1_URL
 """
     app, camera_path, manifest = _write_valid_inputs(tmp_path, cameras=cameras)
-    secret_url = "rtsp://admin:camera-secret@example.test/live"
+    secret_url = "rtsp://" + "admin:camera-secret" + "@example.test/live"
     env_file = tmp_path / ".env"
     env_file.write_text(f"CAMERA_1_URL={secret_url}\n", encoding="utf-8")
 

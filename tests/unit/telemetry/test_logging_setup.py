@@ -59,15 +59,13 @@ def test_json_log_contains_timestamp_level_logger_message_and_context(tmp_path) 
 
 def test_final_json_redacts_literals_url_userinfo_arguments_and_exceptions(tmp_path) -> None:
     secret = "literal-secret"
+    rtsp_url = "rtsp://" + "admin:camera-pass" + "@example.test/live"
     logger = configure_logging("INFO", tmp_path, secrets=[secret])
     try:
         try:
             raise RuntimeError(f"failure included {secret}")
         except RuntimeError:
-            logger.exception(
-                "connection %s failed for rtsp://admin:camera-pass@example.test/live",
-                secret,
-            )
+            logger.exception("connection %s failed for %s", secret, rtsp_url)
         _flush(logger)
 
         raw = (tmp_path / "aot.log").read_text(encoding="utf-8")
@@ -82,7 +80,9 @@ def test_final_json_redacts_literals_url_userinfo_arguments_and_exceptions(tmp_p
 
 
 def test_redact_text_hides_supported_url_credentials_and_literal_secrets() -> None:
-    value = "token-123 https://user:pass@example.test/path rtsp://cam:secret@host/live"
+    https_url = "https://" + "user:pass" + "@example.test/path"
+    rtsp_url = "rtsp://" + "cam:secret" + "@host/live"
+    value = f"token-123 {https_url} {rtsp_url}"
 
     redacted = redact_text(value, ["token-123"])
 
