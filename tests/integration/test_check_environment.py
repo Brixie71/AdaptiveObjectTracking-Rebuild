@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -96,3 +99,70 @@ def test_cli_json_is_parseable_and_sanitized(tmp_path, passing_machine, capsys) 
     assert payload["ok"] is True
     assert isinstance(payload["checks"], list)
     assert "rtsp://" not in output
+
+
+def test_cli_human_error_does_not_echo_malformed_yaml_credentials(
+    tmp_path,
+    passing_machine,
+    capsys,
+) -> None:
+    app, cameras, manifest = _write_cli_inputs(tmp_path)
+    secret = "admin:" + "camera-pass"
+    token = "review-" + "token"
+    cameras.write_text(
+        f"schema_version: 1\nsources: [rtsp://{secret}@camera.test/live?token={token}\n",
+        encoding="utf-8",
+    )
+
+    result = main(_arguments(app, cameras, manifest))
+
+    output = capsys.readouterr().out
+    assert result == 1
+    assert "[FAIL] configuration" in output
+    assert secret not in output
+    assert token not in output
+
+
+@pytest.mark.parametrize("blocked_module", ["yaml", "dotenv"])
+def test_cli_bootstraps_when_configuration_dependency_cannot_import(
+    tmp_path,
+    blocked_module: str,
+) -> None:
+    app, cameras, manifest = _write_cli_inputs(tmp_path)
+    source_root = Path(__file__).resolve().parents[2] / "src"
+    code = f"""
+import builtins
+import json
+real_import = builtins.__import__
+def blocked(name, *args, **kwargs):
+    if name.split('.')[0] == {blocked_module!r}:
+        raise ModuleNotFoundError("blocked test dependency", name={blocked_module!r})
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = blocked
+from aot.telemetry.environment import main
+raise SystemExit(main([
+    '--json',
+    '--app-config', {str(app)!r},
+    '--camera-config', {str(cameras)!r},
+    '--model-manifest', {str(manifest)!r},
+]))
+"""
+    process_environment = os.environ.copy()
+    process_environment["PYTHONPATH"] = str(source_root)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=process_environment,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "Traceback" not in completed.stderr
+    payload = json.loads(completed.stdout)
+    names = [check["name"] for check in payload["checks"]]
+    assert names.index("dependencies") < names.index("configuration")
+    configuration = next(check for check in payload["checks"] if check["name"] == "configuration")
+    assert configuration["status"] == "fail"
+    assert "unavailable" in configuration["summary"].lower()

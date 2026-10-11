@@ -14,15 +14,11 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Sequence
 
-from aot.config import (
+from aot.config.types import (
     AppSettings,
     ComputeConfig,
-    ConfigError,
     SourceType,
-    load_settings,
-    resolve_rtsp_url,
 )
-from aot.config.model_manifest import ModelManifestError, load_model_manifest
 
 from .device_probe import ComputeDeviceInfo, probe_compute_device
 from .logging_setup import LoggingSetupError, configure_logging, redact_text
@@ -145,6 +141,8 @@ def _configuration_check(
     env_path: Path | None,
 ) -> tuple[EnvironmentCheck, AppSettings | None, tuple[str, ...]]:
     try:
+        from aot.config.loader import ConfigError, load_settings, resolve_rtsp_url
+
         settings = load_settings(app_path, cameras_path, env_path)
         secrets: list[str] = []
         rtsp_keys: list[str] = []
@@ -153,6 +151,20 @@ def _configuration_check(
                 rtsp_keys.append(source.rtsp_env_key)
                 if source.enabled:
                     secrets.append(resolve_rtsp_url(source))
+    except ModuleNotFoundError as error:
+        return (
+            EnvironmentCheck(
+                name="configuration",
+                status=CheckStatus.FAIL,
+                summary=(
+                    "Configuration checks are unavailable because "
+                    f"{error.name!r} cannot be imported"
+                ),
+                details={"app_path": str(app_path), "cameras_path": str(cameras_path)},
+            ),
+            None,
+            (),
+        )
     except ConfigError as error:
         return (
             EnvironmentCheck(
@@ -183,7 +195,19 @@ def _configuration_check(
 
 def _manifest_check(manifest_path: Path) -> EnvironmentCheck:
     try:
+        from aot.config.model_manifest import ModelManifestError, load_model_manifest
+
         manifest = load_model_manifest(manifest_path)
+    except ModuleNotFoundError as error:
+        return EnvironmentCheck(
+            name="model_manifest",
+            status=CheckStatus.FAIL,
+            summary=(
+                "Model manifest checks are unavailable because "
+                f"{error.name!r} cannot be imported"
+            ),
+            details={"path": str(manifest_path)},
+        )
     except ModelManifestError as error:
         return EnvironmentCheck(
             name="model_manifest",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -29,7 +30,13 @@ def _load_mapping(path: Path) -> dict[str, Any]:
     except OSError as error:
         raise ConfigError(f"Cannot read configuration {path}: {error}") from error
     except yaml.YAMLError as error:
-        raise ConfigError(f"Invalid YAML in {path}: {error}") from error
+        mark = getattr(error, "problem_mark", None)
+        location = (
+            f" at line {mark.line + 1}, column {mark.column + 1}"
+            if mark is not None
+            else ""
+        )
+        raise ConfigError(f"Invalid YAML in {path}{location}") from error
     if not isinstance(value, dict):
         raise ConfigError(f"Configuration {path} must contain a mapping")
     return value
@@ -41,7 +48,10 @@ def _reject_unknown(
     path: Path,
     context: str,
 ) -> None:
-    unknown = sorted(set(value) - allowed)
+    non_string = next((key for key in value if not isinstance(key, str)), None)
+    if non_string is not None:
+        raise ConfigError(f"Keys in {context} must be strings at {path}")
+    unknown = sorted(key for key in value if key not in allowed)
     if unknown:
         raise ConfigError(f"Unknown key {unknown[0]!r} in {context} at {path}")
 
@@ -54,9 +64,20 @@ def _schema_version(value: Mapping[str, Any], path: Path) -> int:
 
 
 def _positive_number(value: Any, field: str, path: Path) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-        raise ConfigError(f"{field} must be positive in {path}")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ConfigError(f"{field} must be a finite positive number in {path}")
     return float(value)
+
+
+def _positive_integer(value: Any, field: str, path: Path) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigError(f"{field} must be a positive integer in {path}")
+    return value
 
 
 def _nonblank(value: Any, field: str, path: Path) -> str:
@@ -110,11 +131,15 @@ def _load_source(value: Any, path: Path) -> CameraSourceConfig:
     if not isinstance(enabled, bool):
         raise ConfigError(f"enabled must be true or false for {source_id!r} in {path}")
 
-    width = int(_positive_number(value.get("width", 640), "width", path))
-    height = int(_positive_number(value.get("height", 480), "height", path))
+    width = _positive_integer(value.get("width", 640), "width", path)
+    height = _positive_integer(value.get("height", 480), "height", path)
     fps = _positive_number(value.get("fps", 15.0), "fps", path)
     rotation = value.get("rotation", 0)
-    if rotation not in {0, 90, 180, 270}:
+    if (
+        isinstance(rotation, bool)
+        or not isinstance(rotation, int)
+        or rotation not in {0, 90, 180, 270}
+    ):
         raise ConfigError(f"rotation must be one of 0, 90, 180, 270 in {path}")
 
     device_index = value.get("device_index")

@@ -55,7 +55,10 @@ def _reject_unknown(
     path: Path,
     context: str,
 ) -> None:
-    unknown = sorted(set(value) - allowed)
+    non_string = next((key for key in value if not isinstance(key, str)), None)
+    if non_string is not None:
+        raise ModelManifestError(f"Keys in {context} must be strings at {path}")
+    unknown = sorted(key for key in value if key not in allowed)
     if unknown:
         raise ModelManifestError(f"Unknown key {unknown[0]!r} in {context} at {path}")
 
@@ -63,8 +66,16 @@ def _reject_unknown(
 def _safe_relative_path(value: Any, manifest_path: Path) -> Path:
     text = _nonblank(value, "path", manifest_path)
     model_path = Path(text)
-    is_absolute = PurePosixPath(text).is_absolute() or PureWindowsPath(text).is_absolute()
-    if is_absolute or ".." in model_path.parts:
+    posix_path = PurePosixPath(text)
+    windows_path = PureWindowsPath(text)
+    is_unsafe = (
+        posix_path.is_absolute()
+        or bool(windows_path.drive)
+        or bool(windows_path.root)
+        or ".." in posix_path.parts
+        or ".." in windows_path.parts
+    )
+    if is_unsafe:
         raise ModelManifestError(f"Model path must remain relative to the model store in {manifest_path}")
     return model_path
 
@@ -110,7 +121,13 @@ def load_model_manifest(path: Path) -> ModelManifest:
     except OSError as error:
         raise ModelManifestError(f"Cannot read model manifest {path}: {error}") from error
     except yaml.YAMLError as error:
-        raise ModelManifestError(f"Invalid YAML in model manifest {path}: {error}") from error
+        mark = getattr(error, "problem_mark", None)
+        location = (
+            f" at line {mark.line + 1}, column {mark.column + 1}"
+            if mark is not None
+            else ""
+        )
+        raise ModelManifestError(f"Invalid YAML in model manifest {path}{location}") from error
     if not isinstance(value, dict):
         raise ModelManifestError(f"Model manifest {path} must contain a mapping")
     _reject_unknown(value, {"schema_version", "models"}, path, "model manifest")

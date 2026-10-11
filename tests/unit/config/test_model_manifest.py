@@ -184,3 +184,52 @@ models:
     manifest = load_model_manifest(path)
 
     assert manifest.models[0].role == role
+
+
+@pytest.mark.parametrize("unsafe_path", [r"C:model.pt", r"\external\model.pt"])
+def test_windows_drive_or_root_qualified_paths_are_rejected(tmp_path, unsafe_path: str) -> None:
+    path = _write_manifest(
+        tmp_path,
+        f"""\
+schema_version: 1
+models:
+  - model_id: unsafe
+    role: detector
+    path: '{unsafe_path}'
+    source: local
+""",
+    )
+
+    with pytest.raises(ModelManifestError) as error:
+        load_model_manifest(path)
+
+    assert "relative" in str(error.value)
+
+
+def test_mixed_type_unknown_manifest_keys_raise_boundary_error(tmp_path) -> None:
+    path = _write_manifest(
+        tmp_path,
+        "schema_version: 1\nmodels: []\nz_unknown: unsupported\n1: unsupported\n",
+    )
+
+    with pytest.raises(ModelManifestError) as error:
+        load_model_manifest(path)
+
+    assert "must be strings" in str(error.value)
+
+
+def test_malformed_manifest_yaml_does_not_echo_credentials(tmp_path) -> None:
+    secret = "admin:" + "model-pass"
+    token = "manifest-" + "token"
+    path = _write_manifest(
+        tmp_path,
+        f"schema_version: 1\nmodels: [rtsp://{secret}@host/model?token={token}\n",
+    )
+
+    with pytest.raises(ModelManifestError) as error:
+        load_model_manifest(path)
+
+    message = str(error.value)
+    assert "Invalid YAML" in message
+    assert secret not in message
+    assert token not in message

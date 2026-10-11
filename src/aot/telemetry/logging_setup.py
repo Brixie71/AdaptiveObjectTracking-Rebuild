@@ -26,10 +26,10 @@ class LoggingSetupError(RuntimeError):
 def redact_text(value: str, secrets: Iterable[str] = ()) -> str:
     """Remove explicit secrets and URL user-info from displayable text."""
 
-    redacted = URL_USERINFO.sub(r"\1[REDACTED]@", str(value))
+    redacted = str(value)
     for secret in sorted((item for item in secrets if item), key=len, reverse=True):
         redacted = redacted.replace(secret, "[REDACTED]")
-    return redacted
+    return URL_USERINFO.sub(r"\1[REDACTED]@", redacted)
 
 
 class _JsonFormatter(logging.Formatter):

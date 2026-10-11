@@ -92,6 +92,24 @@ def test_redact_text_hides_supported_url_credentials_and_literal_secrets() -> No
     )
 
 
+def test_registered_complete_rtsp_url_is_removed_before_structural_redaction() -> None:
+    secret_url = (
+        "rtsp://"
+        + "admin:"
+        + "camera-pass"
+        + "@camera.test/live?token="
+        + "review-"
+        + "token"
+    )
+
+    redacted = redact_text(f"connection failed for {secret_url}", [secret_url])
+
+    assert secret_url not in redacted
+    assert "camera-" + "pass" not in redacted
+    assert "review-" + "token" not in redacted
+    assert redacted == "connection failed for [REDACTED]"
+
+
 def test_reconfiguration_replaces_owned_handlers_without_duplicate_lines(tmp_path) -> None:
     first = configure_logging("INFO", tmp_path)
     second = configure_logging("INFO", tmp_path)

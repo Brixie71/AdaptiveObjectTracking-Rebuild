@@ -44,8 +44,8 @@
 python -m pip install -e . --no-deps
 # exit 0; adaptive-object-tracking 0.1.0 installed editable
 
-python -m pytest tests/unit/config tests/unit/telemetry tests/integration/test_check_environment.py -v
-# exit 0; 67 passed
+python -m pytest -q
+# exit 0; 81 passed
 
 python -m pip check
 # exit 0; no broken requirements found
@@ -58,6 +58,8 @@ python scripts/check_environment.py --json
 ```
 
 The diagnostic validated Windows, Python 3.11, 64-bit architecture, all required installed distributions, non-sensitive example configuration, the empty model manifest, CPU-safe compute resolution, and a structured log write. The JSON output contained environment-variable key names but no resolved RTSP credentials.
+
+The final review regressions also verified sanitized malformed-YAML failures, complete registered-URL redaction, total typed validation for malformed configuration values, rejection of Windows drive/root-qualified model paths, and fresh-process diagnostic startup when PyYAML or python-dotenv cannot import.
 
 ## Gate result
 

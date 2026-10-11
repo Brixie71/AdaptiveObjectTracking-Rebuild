@@ -166,6 +166,56 @@ def test_rotation_must_be_a_supported_quarter_turn(tmp_path) -> None:
     assert "rotation" in str(error.value)
 
 
+def test_malformed_yaml_error_does_not_echo_credentials(tmp_path) -> None:
+    secret = "admin:" + "camera-pass"
+    token = "review-" + "token"
+    app, cameras = _write_configs(
+        tmp_path,
+        cameras=f"schema_version: 1\nsources: [rtsp://{secret}@camera.test/live?token={token}\n",
+    )
+
+    with pytest.raises(ConfigError) as error:
+        load_settings(app, cameras)
+
+    message = str(error.value)
+    assert "Invalid YAML" in message
+    assert secret not in message
+    assert token not in message
+
+
+@pytest.mark.parametrize(
+    ("replacement", "field"),
+    [
+        ("    width: 0.5", "width"),
+        ("    width: .inf", "width"),
+        ("    fps: .nan", "fps"),
+        ("    rotation: []", "rotation"),
+    ],
+)
+def test_invalid_numeric_and_rotation_values_raise_config_error(
+    tmp_path,
+    replacement: str,
+    field: str,
+) -> None:
+    cameras = VALID_CAMERAS.replace("    device_index: 0", f"    device_index: 0\n{replacement}")
+    app_path, cameras_path = _write_configs(tmp_path, cameras=cameras)
+
+    with pytest.raises(ConfigError) as error:
+        load_settings(app_path, cameras_path)
+
+    assert field in str(error.value)
+
+
+def test_mixed_type_unknown_keys_raise_config_error(tmp_path) -> None:
+    app = VALID_APP + "z_unknown: unsupported\n1: unsupported\n"
+    app_path, cameras_path = _write_configs(tmp_path, app=app)
+
+    with pytest.raises(ConfigError) as error:
+        load_settings(app_path, cameras_path)
+
+    assert "must be strings" in str(error.value)
+
+
 @pytest.mark.parametrize(
     "source",
     [
