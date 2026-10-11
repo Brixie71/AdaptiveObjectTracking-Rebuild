@@ -1,0 +1,6 @@
+schema_version: 1
+runtime_dir: ../runtime
+log_level: INFO
+compute:
+  preference: auto
+  cuda_index: 0

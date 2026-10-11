@@ -1,0 +1,31 @@
+schema_version: 1
+sources:
+  - source_id: usb-1
+    name: USB Camera 1
+    type: usb
+    enabled: false
+    device_index: 0
+    width: 640
+    height: 480
+    fps: 15
+    rotation: 0
+
+  - source_id: cctv-1
+    name: RTSP Camera 1
+    type: rtsp
+    enabled: false
+    rtsp_env_key: CAMERA_1_URL
+    width: 640
+    height: 480
+    fps: 15
+    rotation: 0
+
+  - source_id: offline-demo
+    name: Offline Demo
+    type: offline
+    enabled: false
+    offline_path: ../data/offline_samples/demo.mp4
+    width: 640
+    height: 480
+    fps: 15
+    rotation: 0
