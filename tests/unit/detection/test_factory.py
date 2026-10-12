@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
+import traceback
 
 import pytest
 
@@ -106,7 +108,7 @@ def test_factory_closes_backend_when_allowlist_validation_fails(tmp_path) -> Non
     assert backend.close_count == 1
 
 
-def test_factory_hides_resolver_and_backend_details(tmp_path) -> None:
+def test_factory_hides_resolver_and_backend_details(tmp_path, capsys) -> None:
     secret = "rtsp://admin:model-pass@example.invalid/model.pt"
     manifest, _ = _manifest(tmp_path)
 
@@ -117,14 +119,23 @@ def test_factory_hides_resolver_and_backend_details(tmp_path) -> None:
             model_store=tmp_path,
             compute=_compute(),
         )
+    def noisy_failure(_path):
+        print(secret)
+        logging.getLogger("ultralytics").warning(secret)
+        raise RuntimeError(secret)
+
     with pytest.raises(DetectorLoadError) as backend_error:
         create_detector(
             _config(),
             manifest,
             model_store=tmp_path,
             compute=_compute(),
-            backend_factory=lambda _path: (_ for _ in ()).throw(RuntimeError(secret)),
+            backend_factory=noisy_failure,
         )
 
     assert secret not in str(missing_error.value)
     assert secret not in str(backend_error.value)
+    assert secret not in "".join(traceback.format_exception(backend_error.value))
+    captured = capsys.readouterr()
+    assert secret not in captured.out
+    assert secret not in captured.err

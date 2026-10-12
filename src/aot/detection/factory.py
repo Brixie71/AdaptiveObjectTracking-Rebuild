@@ -10,7 +10,7 @@ from aot.config.model_store import resolve_model_artifact
 from aot.config.types import DetectionConfig
 from aot.telemetry.device_probe import ComputeDeviceInfo
 
-from .backend import YoloBackend, open_ultralytics_backend
+from .backend import YoloBackend, isolated_backend_output, open_ultralytics_backend
 from .types import Detector, DetectorLoadError
 from .yolo import YoloDetector
 
@@ -36,22 +36,24 @@ def create_detector(
             expected_role="detector",
             model_store=model_store,
         )
-    except Exception as error:
-        raise DetectorLoadError("Detector model could not be resolved") from error
+    except Exception:
+        raise DetectorLoadError("Detector model could not be resolved") from None
 
     backend: YoloBackend | None = None
     try:
-        backend = backend_factory(artifact.path)
-        return YoloDetector(
-            artifact.model_id,
-            config,
-            backend,
-            compute.resolved,
-        )
-    except Exception as error:
+        with isolated_backend_output():
+            backend = backend_factory(artifact.path)
+            return YoloDetector(
+                artifact.model_id,
+                config,
+                backend,
+                compute.resolved,
+            )
+    except Exception:
         if backend is not None:
             try:
-                backend.close()
+                with isolated_backend_output():
+                    backend.close()
             except Exception:
                 pass
-        raise DetectorLoadError("Detector could not be loaded") from error
+        raise DetectorLoadError("Detector could not be loaded") from None

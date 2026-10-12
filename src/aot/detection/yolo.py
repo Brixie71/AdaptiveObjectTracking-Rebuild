@@ -5,7 +5,7 @@ from __future__ import annotations
 from aot.capture.types import FramePacket
 from aot.config.types import DetectionConfig
 
-from .backend import YoloBackend
+from .backend import YoloBackend, isolated_backend_output
 from .normalize import normalize_detections, resolve_allowed_class_ids
 from .types import (
     DetectionBatch,
@@ -30,8 +30,10 @@ class YoloDetector:
                 backend.class_names,
                 config.allowed_classes,
             )
-        except Exception as error:
-            raise DetectorLoadError("Detector allowlist is incompatible with the model") from error
+        except Exception:
+            raise DetectorLoadError(
+                "Detector allowlist is incompatible with the model"
+            ) from None
         self.model_id = model_id
         self.class_names = tuple(
             name for _, name in sorted(backend.class_names.items(), key=lambda item: item[0])
@@ -46,28 +48,30 @@ class YoloDetector:
         if self._closed:
             raise DetectorInferenceError("Detector is closed")
         try:
-            rows = self._backend.predict(
-                packet.frame,
-                confidence_threshold=self._config.confidence_threshold,
-                iou_threshold=self._config.iou_threshold,
-                max_detections=self._config.max_detections,
-                device=self.device,
-            )
-        except Exception as error:
-            raise DetectorInferenceError("Detector inference failed") from error
-        return normalize_detections(
-            packet,
-            rows,
-            class_names=self._backend.class_names,
-            allowed_class_ids=self._allowed_class_ids,
-            max_detections=self._config.max_detections,
-        )
+            with isolated_backend_output():
+                rows = self._backend.predict(
+                    packet.frame,
+                    confidence_threshold=self._config.confidence_threshold,
+                    iou_threshold=self._config.iou_threshold,
+                    max_detections=self._config.max_detections,
+                    device=self.device,
+                )
+                return normalize_detections(
+                    packet,
+                    rows,
+                    class_names=self._backend.class_names,
+                    allowed_class_ids=self._allowed_class_ids,
+                    max_detections=self._config.max_detections,
+                )
+        except Exception:
+            raise DetectorInferenceError("Detector inference failed") from None
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         try:
-            self._backend.close()
-        except Exception as error:
-            raise DetectionError("Detector cleanup failed") from error
+            with isolated_backend_output():
+                self._backend.close()
+        except Exception:
+            raise DetectionError("Detector cleanup failed") from None

@@ -16,6 +16,7 @@ from aot.capture.types import FramePacket
 from aot.config.loader import load_settings
 from aot.config.model_manifest import load_model_manifest
 from aot.detection.factory import create_detector
+from aot.detection.backend import isolated_backend_output
 from aot.detection.types import Detector
 from aot.telemetry.device_probe import probe_compute_device
 
@@ -207,27 +208,28 @@ def main(
         return 1
 
     try:
-        manifest = manifest_loader(args.model_manifest)
-        compute = compute_probe(settings.compute)
-        detector = detector_factory(
-            settings.detection,
-            manifest,
-            model_store=args.models_dir,
-            compute=compute,
-        )
-        packet = FramePacket(
-            source_id="hardware-test",
-            sequence=0,
-            captured_at_monotonic_ns=time.monotonic_ns(),
-            frame=np.zeros((480, 640, 3), dtype=np.uint8),
-        )
-        result = detector_probe(
-            detector,
-            packet,
-            device=compute.resolved,
-            warmup_runs=args.warmup_runs,
-            measured_runs=args.measured_runs,
-        )
+        with isolated_backend_output():
+            manifest = manifest_loader(args.model_manifest)
+            compute = compute_probe(settings.compute)
+            detector = detector_factory(
+                settings.detection,
+                manifest,
+                model_store=args.models_dir,
+                compute=compute,
+            )
+            packet = FramePacket(
+                source_id="hardware-test",
+                sequence=0,
+                captured_at_monotonic_ns=time.monotonic_ns(),
+                frame=np.zeros((480, 640, 3), dtype=np.uint8),
+            )
+            result = detector_probe(
+                detector,
+                packet,
+                device=compute.resolved,
+                warmup_runs=args.warmup_runs,
+                measured_runs=args.measured_runs,
+            )
     except Exception:
         payload = _failure_payload(
             HardwareTestStatus.FAILED,

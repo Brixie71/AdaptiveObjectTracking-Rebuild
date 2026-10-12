@@ -3,10 +3,27 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
+import io
+import logging
 from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
+
+
+@contextmanager
+def isolated_backend_output():
+    """Contain synchronous third-party console and Ultralytics logger output."""
+
+    logger = logging.getLogger("ultralytics")
+    previously_disabled = logger.disabled
+    logger.disabled = True
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            yield
+    finally:
+        logger.disabled = previously_disabled
 
 
 class YoloBackend(Protocol):
@@ -35,6 +52,16 @@ def _plain_array(value: Any) -> np.ndarray:
     if hasattr(value, "numpy"):
         value = value.numpy()
     return np.asarray(value)
+
+
+def _numeric_array(value: Any, field: str) -> np.ndarray:
+    result = _plain_array(value)
+    if not np.issubdtype(result.dtype, np.number) or np.issubdtype(
+        result.dtype,
+        np.bool_,
+    ):
+        raise ValueError(f"Detector backend returned non-numeric {field}")
+    return result
 
 
 class UltralyticsYoloBackend:
@@ -68,12 +95,12 @@ class UltralyticsYoloBackend:
         )
         if not isinstance(results, Sequence) or len(results) != 1:
             raise ValueError("Detector backend must return exactly one result")
-        boxes = getattr(results[0], "boxes", None)
-        if boxes is None:
-            return ()
-        xyxy = _plain_array(getattr(boxes, "xyxy", None))
-        confidence = _plain_array(getattr(boxes, "conf", None))
-        classes = _plain_array(getattr(boxes, "cls", None))
+        if not hasattr(results[0], "boxes") or results[0].boxes is None:
+            raise ValueError("Detector backend result has no boxes")
+        boxes = results[0].boxes
+        xyxy = _numeric_array(getattr(boxes, "xyxy", None), "boxes")
+        confidence = _numeric_array(getattr(boxes, "conf", None), "confidence")
+        classes = _numeric_array(getattr(boxes, "cls", None), "class IDs")
         if xyxy.ndim != 2 or xyxy.shape[1:] != (4,):
             raise ValueError("Detector backend returned malformed boxes")
         if confidence.ndim != 1 or classes.ndim != 1:
@@ -99,6 +126,7 @@ class UltralyticsYoloBackend:
 def open_ultralytics_backend(path: Path) -> YoloBackend:
     """Load one verified artifact through a lazy Ultralytics import."""
 
-    from ultralytics import YOLO
+    with isolated_backend_output():
+        from ultralytics import YOLO
 
-    return UltralyticsYoloBackend(YOLO(str(path)))
+        return UltralyticsYoloBackend(YOLO(str(path)))

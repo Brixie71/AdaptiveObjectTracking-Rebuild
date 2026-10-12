@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import traceback
 
 import numpy as np
 import pytest
@@ -79,6 +80,7 @@ def test_yolo_detector_translates_sensitive_inference_and_cleanup_errors() -> No
         detector.detect(_packet())
 
     assert secret not in str(inference_error.value)
+    assert secret not in "".join(traceback.format_exception(inference_error.value))
 
     cleanup_backend = FakeYoloBackend(close_error=RuntimeError(secret))
     cleanup_detector = YoloDetector("yolov8n-coco", _config(), cleanup_backend, "cpu")
@@ -87,7 +89,48 @@ def test_yolo_detector_translates_sensitive_inference_and_cleanup_errors() -> No
     cleanup_detector.close()
 
     assert secret not in str(cleanup_error.value)
+    assert secret not in "".join(traceback.format_exception(cleanup_error.value))
     assert cleanup_backend.close_count == 1
+
+
+@pytest.mark.parametrize("yield_first", [False, True])
+def test_lazy_backend_failures_are_translated_and_sanitized(yield_first: bool) -> None:
+    secret = "lazy-private-marker"
+
+    class LazyBackend(FakeYoloBackend):
+        def predict(self, *args, **kwargs):
+            def rows():
+                if yield_first:
+                    yield (1, 2, 30, 40, 0.9, 0)
+                raise RuntimeError(secret)
+
+            return rows()
+
+    detector = YoloDetector("yolov8n-coco", _config(), LazyBackend(), "cpu")
+
+    with pytest.raises(DetectorInferenceError) as caught:
+        detector.detect(_packet())
+
+    formatted = "".join(traceback.format_exception(caught.value))
+    assert secret not in str(caught.value)
+    assert secret not in formatted
+
+
+def test_detector_contains_backend_stdout_and_logging(capsys) -> None:
+    secret = "backend-private-output"
+    detector = YoloDetector(
+        "yolov8n-coco",
+        _config(),
+        FakeYoloBackend(rows=((1, 2, 30, 40, 0.9, 0),), output=secret),
+        "cpu",
+    )
+
+    detector.detect(_packet())
+    detector.close()
+
+    captured = capsys.readouterr()
+    assert secret not in captured.out
+    assert secret not in captured.err
 
 
 def test_yolo_detector_rejects_detection_after_close() -> None:
@@ -151,6 +194,64 @@ def test_ultralytics_backend_converts_one_result_to_plain_rows() -> None:
         "device": "cpu",
         "verbose": False,
     }
+
+
+def test_ultralytics_backend_accepts_well_formed_empty_boxes() -> None:
+    boxes = SimpleNamespace(
+        xyxy=_Tensor(np.empty((0, 4), dtype=np.float32)),
+        conf=_Tensor(np.empty((0,), dtype=np.float32)),
+        cls=_Tensor(np.empty((0,), dtype=np.float32)),
+    )
+    backend = UltralyticsYoloBackend(_Model([SimpleNamespace(boxes=boxes)]))
+
+    rows = backend.predict(
+        _packet().frame,
+        confidence_threshold=0.25,
+        iou_threshold=0.7,
+        max_detections=300,
+        device="cpu",
+    )
+
+    assert rows == ()
+
+
+@pytest.mark.parametrize("result", [SimpleNamespace(), SimpleNamespace(boxes=None)])
+def test_ultralytics_backend_rejects_missing_boxes(result) -> None:
+    backend = UltralyticsYoloBackend(_Model([result]))
+
+    with pytest.raises(ValueError, match="boxes"):
+        backend.predict(
+            _packet().frame,
+            confidence_threshold=0.25,
+            iou_threshold=0.7,
+            max_detections=300,
+            device="cpu",
+        )
+
+
+@pytest.mark.parametrize(
+    ("confidence", "class_id"),
+    [
+        (np.asarray([True]), np.asarray([0.0])),
+        (np.asarray([0.9]), np.asarray([False])),
+        (np.asarray(["0.9"]), np.asarray(["0"])),
+    ],
+)
+def test_malformed_scalar_dtypes_fail_through_detector(confidence, class_id) -> None:
+    boxes = SimpleNamespace(
+        xyxy=_Tensor(np.asarray([[1.0, 2.0, 30.0, 40.0]])),
+        conf=_Tensor(confidence),
+        cls=_Tensor(class_id),
+    )
+    detector = YoloDetector(
+        "yolov8n-coco",
+        _config(),
+        UltralyticsYoloBackend(_Model([SimpleNamespace(boxes=boxes)])),
+        "cpu",
+    )
+
+    with pytest.raises(DetectorInferenceError):
+        detector.detect(_packet())
 
 
 @pytest.mark.parametrize("results", [[], [SimpleNamespace(boxes=None), SimpleNamespace(boxes=None)]])

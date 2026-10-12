@@ -127,8 +127,12 @@ def test_detector_probe_cli_reports_disabled_configuration_as_unsupported(capsys
 def test_detector_probe_cli_sanitizes_factory_failures(capsys) -> None:
     secret = "rtsp://admin:model-pass@example.invalid/model?token=private"
 
+    def noisy_factory(*args, **kwargs):
+        print(secret)
+        raise RuntimeError(secret)
+
     exit_code = _run(
-        detector_factory=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError(secret))
+        detector_factory=noisy_factory
     )
 
     output = capsys.readouterr().out
@@ -137,6 +141,33 @@ def test_detector_probe_cli_sanitizes_factory_failures(capsys) -> None:
     assert payload["detector"]["status"] == "failed"
     assert secret not in output
     assert "Traceback" not in output
+
+
+def test_detector_probe_cli_contains_noisy_success_output(capsys) -> None:
+    secret = "successful-private-output"
+
+    def noisy_factory(*args, **kwargs):
+        print(secret)
+        return object()
+
+    def noisy_probe(detector, packet, **kwargs):
+        print(secret)
+        return _result(HardwareTestStatus.SUCCESS)
+
+    exit_code = main(
+        ["--json"],
+        settings_loader=lambda *_args: _settings(),
+        manifest_loader=lambda _path: ModelManifest(schema_version=1, models=()),
+        compute_probe=lambda _config: _compute(),
+        detector_factory=noisy_factory,
+        detector_probe=noisy_probe,
+    )
+
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert secret not in output
 
 
 def test_detector_probe_cli_rejects_invalid_numeric_arguments(capsys) -> None:
