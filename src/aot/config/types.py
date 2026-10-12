@@ -32,6 +32,16 @@ class ComputeConfig:
 
 
 @dataclass(frozen=True)
+class CaptureRuntimeConfig:
+    """Bounded capture-worker and reconnection policy."""
+
+    queue_capacity: int = 2
+    reconnect_initial_seconds: float = 0.25
+    reconnect_max_seconds: float = 5.0
+    shutdown_timeout_seconds: float = 5.0
+
+
+@dataclass(frozen=True)
 class CameraSourceConfig:
     """Non-sensitive configuration for one camera or video source."""
 
@@ -57,3 +67,4 @@ class AppSettings:
     log_level: str
     compute: ComputeConfig
     sources: tuple[CameraSourceConfig, ...]
+    capture: CaptureRuntimeConfig = CaptureRuntimeConfig()
