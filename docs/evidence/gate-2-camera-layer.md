@@ -27,7 +27,7 @@ The generator reopened the artifact and verified exactly three decodable frames.
 
 ```powershell
 python -m pytest -q
-# exit 0; 198 passed, 1 skipped
+# exit 0; 204 passed, 1 skipped
 
 python -m pytest tests/offline/test_three_source_capture.py -q
 # exit 0; 1 passed
@@ -44,6 +44,8 @@ python scripts/probe_cameras.py --app-config config/app.example.yaml --camera-co
 
 The implementation credential scan produced no live credential match outside excluded historical/reference, plan, prerequisite, and test paths. Automated tests cover secret-safe resolution and errors, normalized output, bounded drops, reconnect timing, per-source isolation, repeated shutdown, source probing, and USB discovery through injected backends.
 
+The final whole-branch review found no Critical issues. Its Important findings were corrected with regressions covering traceback-level secret redaction, stop-during-open handle release, timeout-bounded asynchronous shutdown, and probe cleanup failure classification.
+
 ## Hardware acceptance
 
 **USB/RTSP hardware tests:** `NOT RUN`
@@ -53,3 +55,7 @@ No authorized physical-device configuration was supplied during this verificatio
 ## Gate result
 
 Automated and offline-first Gate 2 evidence passed. Physical USB/RTSP acceptance remains pending the documented opt-in run on named hardware. Detection, tracking, ReID, identity, persistence, and UI behavior are not part of this evidence.
+
+## Deferred review note
+
+The source probe's `dropped_frames` value currently measures observable packet-sequence gaps. Project adapters number successfully returned packets consecutively, so backend-internal loss is not yet measurable there. End-to-end dropped-frame telemetry remains deferred to the diagnostics/performance gate, where worker-buffer drops can be reported explicitly.

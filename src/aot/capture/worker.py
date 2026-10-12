@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -57,6 +58,7 @@ class CaptureWorker:
         self._snapshot_lock = threading.Lock()
         self._attempt_lock = threading.Lock()
         self._attempt_closed = True
+        self._closer_started = False
         self._state = SourceState.CLOSED
         self._last_error: str | None = None
 
@@ -66,7 +68,7 @@ class CaptureWorker:
         self._thread = threading.Thread(
             target=self._run,
             name=f"capture-{self.source.source_id}",
-            daemon=False,
+            daemon=True,
         )
         self._thread.start()
 
@@ -97,6 +99,11 @@ class CaptureWorker:
             try:
                 self._set_status(SourceState.OPENING)
                 self.source.open()
+                with self._attempt_lock:
+                    if self._stop_event.is_set() and self._attempt_closed:
+                        self._attempt_closed = False
+                if self._stop_event.is_set():
+                    return
                 self._set_status(SourceState.OPEN)
                 while not self._stop_event.is_set():
                     packet = self.source.read()
@@ -128,8 +135,9 @@ class CaptureWorker:
         self._set_status(SourceState.CLOSED)
 
     def stop(self) -> bool:
+        deadline = time.monotonic() + self._shutdown_timeout_seconds
         self.request_stop()
-        stopped = self.join(self._shutdown_timeout_seconds)
+        stopped = self.join(max(0.0, deadline - time.monotonic()))
         if stopped:
             self._set_status(SourceState.CLOSED, self._last_error)
         return stopped
@@ -137,7 +145,15 @@ class CaptureWorker:
     def request_stop(self) -> None:
         """Signal shutdown and release the current attempt without joining."""
         self._stop_event.set()
-        self._close_attempt()
+        with self._attempt_lock:
+            should_start_closer = not self._closer_started
+            self._closer_started = True
+        if should_start_closer:
+            threading.Thread(
+                target=self._close_attempt,
+                name=f"capture-close-{self.source.source_id}",
+                daemon=True,
+            ).start()
 
     def join(self, timeout: float | None = None) -> bool:
         thread = self._thread

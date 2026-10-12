@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 
 from aot.capture.buffer import NewestFrameBuffer
+from aot.capture.usb import UsbFrameSource
+from aot.config.types import CameraSourceConfig
 from aot.capture.types import (
     CaptureOpenError,
     CaptureProperties,
@@ -253,3 +255,78 @@ def test_snapshot_reports_queue_depth_and_dropped_frames() -> None:
 
     assert snapshot.queue_depth == 2
     assert snapshot.dropped_frames == 1
+
+
+def test_stop_during_backend_construction_releases_late_handle() -> None:
+    factory_entered = threading.Event()
+    factory_released = threading.Event()
+
+    class LateBackend:
+        release_count = 0
+
+        def is_opened(self):
+            return True
+
+        def set(self, *_args):
+            return True
+
+        def get(self, *_args):
+            return 1.0
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            self.release_count += 1
+
+    backend = LateBackend()
+
+    def delayed_factory(_value):
+        factory_entered.set()
+        assert factory_released.wait(1.0)
+        return backend
+
+    source = UsbFrameSource(
+        CameraSourceConfig(
+            "source-1", "USB", SourceType.USB, device_index=0, width=1, height=1
+        ),
+        backend_factory=delayed_factory,
+    )
+    worker = CaptureWorker(source, NewestFrameBuffer(1), ReconnectPolicy(0.1, 0.2), 0.05)
+    worker.start()
+    assert factory_entered.wait(1.0)
+
+    assert worker.stop() is False
+    factory_released.set()
+    assert worker.join(1.0)
+
+    assert backend.release_count == 1
+    assert source._backend is None
+
+
+def test_shutdown_timeout_includes_slow_close() -> None:
+    read_entered = threading.Event()
+    release_read = threading.Event()
+
+    class SlowCloseSource(ScriptedSource):
+        def read(self):
+            read_entered.set()
+            release_read.wait(1.0)
+            return packet(0)
+
+        def close(self):
+            time.sleep(0.2)
+            release_read.set()
+            super().close()
+
+    source = SlowCloseSource(source_type=SourceType.USB)
+    worker = CaptureWorker(source, NewestFrameBuffer(1), ReconnectPolicy(0.1, 0.2), 0.05)
+    worker.start()
+    assert read_entered.wait(1.0)
+
+    started = time.monotonic()
+    assert worker.stop() is False
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.12
+    assert worker.join(1.0)

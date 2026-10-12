@@ -66,10 +66,10 @@ class CaptureManager:
         return self._workers[source_id].buffer.get_latest()
 
     def stop(self) -> None:
+        deadline = time.monotonic() + self._runtime_config.shutdown_timeout_seconds
         for worker in self._workers.values():
             worker.request_stop()
 
-        deadline = time.monotonic() + self._runtime_config.shutdown_timeout_seconds
         stuck: list[str] = []
         for source_id, worker in self._workers.items():
             remaining = max(0.0, deadline - time.monotonic())

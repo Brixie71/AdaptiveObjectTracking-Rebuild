@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Callable, Mapping
 
@@ -12,8 +13,8 @@ from aot.capture.types import (
     CaptureProperties,
     CaptureReadError,
     FramePacket,
+    SourceState,
 )
-from aot.config.loader import resolve_rtsp_url
 from aot.config.types import CameraSourceConfig, SourceType
 
 
@@ -33,21 +34,36 @@ class RtspFrameSource(BaseFrameSource):
             raise ValueError("RTSP source requires an environment key")
         super().__init__(config, backend_factory, clock_ns)
         self.rtsp_env_key = config.rtsp_env_key
-        self._url_resolver = lambda: resolve_rtsp_url(config, environment)
+        values = os.environ if environment is None else environment
+        self._environment_get = values.get
 
     def open(self) -> CaptureProperties:
+        properties = None
         try:
-            return self._open(self._url_resolver())
-        except Exception as error:
-            raise CaptureOpenError(
-                self.source_id, "RTSP source could not be opened"
-            ) from error
+            resolved = self._environment_get(self.rtsp_env_key)
+            if resolved and resolved.strip():
+                properties = self._open(resolved)
+        except Exception:
+            pass
+        if properties is None:
+            self.state = SourceState.FAILED
+            raise CaptureOpenError(self.source_id, "RTSP source could not be opened")
+        return properties
 
     def read(self) -> FramePacket:
+        packet = None
         try:
-            return self._packet_from(self._read_raw())
+            packet = self._packet_from(self._read_raw())
         except CaptureReadError:
-            if self._backend is not None:
-                self._backend.release()
+            pass
+        if packet is None:
+            with self._backend_lock:
+                backend = self._backend
                 self._backend = None
-            raise
+            if backend is not None:
+                try:
+                    backend.release()
+                except Exception:
+                    pass
+            raise CaptureReadError(self.source_id, "RTSP source read failed")
+        return packet

@@ -167,3 +167,40 @@ def test_shutdown_error_names_only_stuck_source_and_stops_others() -> None:
     release.set()
     wait_until(lambda: not manager.snapshot()["stuck"].alive)
     manager.stop()
+
+
+def test_slow_close_does_not_consume_timeout_before_other_workers_stop() -> None:
+    read_entered = threading.Event()
+    release_read = threading.Event()
+
+    class SlowCloseSource(IntegrationSource):
+        def read(self):
+            read_entered.set()
+            release_read.wait(1.0)
+            return super().read()
+
+        def close(self):
+            time.sleep(0.2)
+            release_read.set()
+            super().close()
+
+    slow = SlowCloseSource("slow", "healthy", SourceType.USB)
+    normal = IntegrationSource("normal", "healthy", SourceType.USB)
+    sources = {"slow": slow, "normal": normal}
+    manager = CaptureManager(
+        CaptureRuntimeConfig(shutdown_timeout_seconds=0.05),
+        lambda item: sources[item.source_id],
+    )
+    manager.start([config("slow", SourceType.USB), config("normal", SourceType.USB)])
+    assert read_entered.wait(1.0)
+
+    started = time.monotonic()
+    with pytest.raises(ManagerShutdownError) as caught:
+        manager.stop()
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.12
+    assert caught.value.source_ids == ("slow",)
+    assert not manager.snapshot()["normal"].alive
+    wait_until(lambda: not manager.snapshot()["slow"].alive)
+    manager.stop()

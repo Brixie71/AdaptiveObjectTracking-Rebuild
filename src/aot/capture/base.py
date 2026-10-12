@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from threading import Lock
 
 import numpy as np
 
@@ -34,6 +35,8 @@ class BaseFrameSource:
         self._backend_factory = backend_factory
         self._clock_ns = clock_ns
         self._backend = None
+        self._backend_lock = Lock()
+        self._close_requested = False
         self._sequence = 0
         self.source_id = config.source_id
         self.source_type = config.source_type
@@ -41,58 +44,93 @@ class BaseFrameSource:
         self.properties: CaptureProperties | None = None
 
     def _open(self, backend_input: int | str) -> CaptureProperties:
-        if self._backend is not None:
-            raise CaptureOpenError(self.source_id, "Source is already open")
+        with self._backend_lock:
+            if self._backend is not None:
+                raise CaptureOpenError(self.source_id, "Source is already open")
+            self._close_requested = False
         self.state = SourceState.OPENING
+
+        backend = None
         try:
             backend = self._backend_factory(backend_input)
-            self._backend = backend
+        except Exception:
+            pass
+        if backend is None:
+            self.state = SourceState.FAILED
+            raise CaptureOpenError(self.source_id, "Source could not be opened")
+
+        with self._backend_lock:
+            cancelled = self._close_requested
+            if not cancelled:
+                self._backend = backend
+        if cancelled:
+            try:
+                backend.release()
+            except Exception:
+                pass
+            self.state = SourceState.CLOSED
+            raise CaptureOpenError(self.source_id, "Source opening was cancelled")
+
+        open_failed = False
+        try:
             if not backend.is_opened():
-                raise CaptureOpenError(self.source_id, "Source could not be opened")
-            backend.set(BackendProperty.WIDTH, float(self._config.width))
-            backend.set(BackendProperty.HEIGHT, float(self._config.height))
-            backend.set(BackendProperty.FPS, float(self._config.fps))
-            self.properties = CaptureProperties(
-                requested_width=self._config.width,
-                requested_height=self._config.height,
-                requested_fps=self._config.fps,
-                negotiated_width=int(backend.get(BackendProperty.WIDTH)),
-                negotiated_height=int(backend.get(BackendProperty.HEIGHT)),
-                negotiated_fps=float(backend.get(BackendProperty.FPS)),
-            )
-        except CaptureOpenError:
+                open_failed = True
+            if not open_failed:
+                backend.set(BackendProperty.WIDTH, float(self._config.width))
+                backend.set(BackendProperty.HEIGHT, float(self._config.height))
+                backend.set(BackendProperty.FPS, float(self._config.fps))
+                self.properties = CaptureProperties(
+                    requested_width=self._config.width,
+                    requested_height=self._config.height,
+                    requested_fps=self._config.fps,
+                    negotiated_width=int(backend.get(BackendProperty.WIDTH)),
+                    negotiated_height=int(backend.get(BackendProperty.HEIGHT)),
+                    negotiated_fps=float(backend.get(BackendProperty.FPS)),
+                )
+        except Exception:
+            open_failed = True
+
+        with self._backend_lock:
+            cancelled = self._close_requested or self._backend is not backend
+        if open_failed or cancelled:
             self._fail_open()
-            raise
-        except Exception as error:
-            self._fail_open()
-            raise CaptureOpenError(
-                self.source_id, "Source could not be opened"
-            ) from error
+            raise CaptureOpenError(self.source_id, "Source could not be opened")
 
         self._sequence = 0
         self.state = SourceState.OPEN
+        assert self.properties is not None
         return self.properties
 
     def _fail_open(self) -> None:
-        if self._backend is not None:
-            self._backend.release()
+        with self._backend_lock:
+            backend = self._backend
             self._backend = None
+        if backend is not None:
+            try:
+                backend.release()
+            except Exception:
+                pass
         self.state = SourceState.FAILED
 
     def _read_raw(self) -> np.ndarray:
-        if self.state is not SourceState.OPEN or self._backend is None:
+        with self._backend_lock:
+            backend = self._backend
+        if self.state is not SourceState.OPEN or backend is None:
             raise CaptureReadError(self.source_id, "Source is not open")
+
+        succeeded = False
+        frame = None
         try:
-            succeeded, frame = self._backend.read()
-        except Exception as error:
-            self.state = SourceState.FAILED
-            raise CaptureReadError(self.source_id, "Source read failed") from error
+            succeeded, frame = backend.read()
+        except Exception:
+            pass
         if not succeeded or frame is None or frame.size == 0:
             self.state = SourceState.FAILED
             raise CaptureReadError(self.source_id, "Source read failed")
         return frame
 
     def _packet_from(self, frame: np.ndarray) -> FramePacket:
+        normalized = None
         try:
             normalized = normalize_frame(
                 frame,
@@ -100,9 +138,11 @@ class BaseFrameSource:
                 height=self._config.height,
                 rotation=self._config.rotation,
             )
-        except FrameNormalizationError as error:
+        except FrameNormalizationError:
+            pass
+        if normalized is None:
             self.state = SourceState.FAILED
-            raise CaptureReadError(self.source_id, "Source frame was invalid") from error
+            raise CaptureReadError(self.source_id, "Source frame was invalid")
         packet = FramePacket(
             source_id=self.source_id,
             sequence=self._sequence,
@@ -113,7 +153,12 @@ class BaseFrameSource:
         return packet
 
     def close(self) -> None:
-        if self._backend is not None:
-            self._backend.release()
+        with self._backend_lock:
+            self._close_requested = True
+            backend = self._backend
             self._backend = None
-        self.state = SourceState.CLOSED
+        try:
+            if backend is not None:
+                backend.release()
+        finally:
+            self.state = SourceState.CLOSED

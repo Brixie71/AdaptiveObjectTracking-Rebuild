@@ -184,3 +184,18 @@ def test_usb_discovery_probes_range_returns_safe_properties_and_releases_all() -
 def test_usb_discovery_requires_nonnegative_integer_limit(max_index) -> None:
     with pytest.raises(ValueError):
         discover_usb_devices(max_index=max_index)
+
+
+def test_cleanup_failure_cannot_be_reported_as_success() -> None:
+    class CleanupFailureSource(ProbeSource):
+        def close(self):
+            self.close_count += 1
+            raise RuntimeError("release failed with private backend detail")
+
+    source = CleanupFailureSource(reads=[packet(0)])
+
+    result = probe_source(source, frame_count=1, clock_ns=lambda: 0)
+
+    assert result.status is HardwareTestStatus.FAILED
+    assert result.summary == "Source cleanup failed"
+    assert "private backend detail" not in json.dumps(result.to_dict())

@@ -1,4 +1,5 @@
 import logging
+import traceback
 
 import numpy as np
 import pytest
@@ -79,6 +80,42 @@ def test_backend_exception_is_sanitized_and_backend_reference_is_cleared(caplog)
     assert secret not in repr(vars(source))
     assert secret not in caplog.text
     assert source.state is SourceState.FAILED
+    assert secret not in "".join(traceback.format_exception(caught.value))
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+
+
+def test_backend_read_exception_has_no_secret_bearing_exception_chain() -> None:
+    secret = credential_url()
+
+    class FailingReadBackend(FakeCaptureBackend):
+        def read(self):
+            raise RuntimeError(f"backend lost {secret}")
+
+    source = RtspFrameSource(
+        rtsp_config(),
+        {"AOT_TEST_CAMERA_URL": secret},
+        RecordingBackendFactory(FailingReadBackend()),
+    )
+    source.open()
+
+    with pytest.raises(CaptureReadError) as caught:
+        source.read()
+
+    assert secret not in "".join(traceback.format_exception(caught.value))
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+
+
+def test_environment_dependency_does_not_use_a_secret_retaining_closure() -> None:
+    environment = {"AOT_TEST_CAMERA_URL": credential_url()}
+    source = RtspFrameSource(
+        rtsp_config(),
+        environment,
+        RecordingBackendFactory(FakeCaptureBackend()),
+    )
+
+    assert getattr(source._environment_get, "__closure__", None) is None
 
 
 def test_rtsp_reads_normalized_packets_and_is_reconnectable() -> None:

@@ -43,6 +43,7 @@ def probe_source(
     previous_sequence: int | None = None
     status = HardwareTestStatus.FAILED
     summary = "Source could not be opened"
+    cleanup_failed = False
 
     try:
         properties = source.open()
@@ -76,7 +77,11 @@ def probe_source(
         try:
             source.close()
         except Exception:
-            pass
+            cleanup_failed = True
+
+    if cleanup_failed:
+        status = HardwareTestStatus.FAILED
+        summary = "Source cleanup failed"
 
     mean_latency = None
     p95_latency = None
