@@ -115,7 +115,12 @@ def test_environment_dependency_does_not_use_a_secret_retaining_closure() -> Non
         RecordingBackendFactory(FakeCaptureBackend()),
     )
 
-    assert getattr(source._environment_get, "__closure__", None) is None
+    assert not any(value is environment for value in vars(source).values())
+    assert not any(
+        getattr(value, "__self__", None) is environment
+        for value in vars(source).values()
+    )
+    assert credential_url() not in repr(vars(source))
 
 
 def test_rtsp_reads_normalized_packets_and_is_reconnectable() -> None:

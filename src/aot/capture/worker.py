@@ -90,7 +90,10 @@ class CaptureWorker:
             if self._attempt_closed:
                 return
             self._attempt_closed = True
+        try:
             self.source.close()
+        except Exception:
+            self._set_status(SourceState.FAILED, "Source cleanup failed")
 
     def _run(self) -> None:
         while not self._stop_event.is_set():

@@ -27,7 +27,7 @@ The generator reopened the artifact and verified exactly three decodable frames.
 
 ```powershell
 python -m pytest -q
-# exit 0; 204 passed, 1 skipped
+# exit 0; 205 passed, 1 skipped
 
 python -m pytest tests/offline/test_three_source_capture.py -q
 # exit 0; 1 passed

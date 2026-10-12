@@ -330,3 +330,27 @@ def test_shutdown_timeout_includes_slow_close() -> None:
 
     assert elapsed < 0.12
     assert worker.join(1.0)
+
+
+def test_shutdown_timeout_is_not_blocked_by_close_already_in_progress() -> None:
+    close_entered = threading.Event()
+
+    class NaturallyClosingSource(ScriptedSource):
+        def close(self):
+            close_entered.set()
+            time.sleep(0.2)
+            super().close()
+
+    source = NaturallyClosingSource(
+        reads=[EndOfStream("source-1", "done")],
+    )
+    worker = CaptureWorker(source, NewestFrameBuffer(1), ReconnectPolicy(0.1, 0.2), 0.05)
+    worker.start()
+    assert close_entered.wait(1.0)
+
+    started = time.monotonic()
+    assert worker.stop() is False
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.12
+    assert worker.join(1.0)
