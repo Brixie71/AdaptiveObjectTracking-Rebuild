@@ -130,3 +130,9 @@ class RuntimeController(QObject):
             self._task = cleanup
             submit_function_task(self._pool, cleanup)
         self._emit_controls()
+
+    def wait_for_done(self, timeout_ms: int = 10_000) -> bool:
+        """Wait only after the GUI loop exits and report close-task success."""
+        if not self._pool.waitForDone(timeout_ms):
+            return False
+        return self._task is None or self._task.succeeded is not False

@@ -108,3 +108,7 @@ class MainWindow(QMainWindow):
         self._refresh_timer.stop()
         self.controller.close()
         event.accept()
+
+    def wait_for_shutdown(self) -> bool:
+        """Complete the already-requested close after the Qt loop exits."""
+        return self.controller.wait_for_done()

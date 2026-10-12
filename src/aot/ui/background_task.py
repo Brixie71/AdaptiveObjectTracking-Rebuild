@@ -25,6 +25,7 @@ class FunctionTask(QRunnable):
         self._function = function
         self._callback_lock = threading.Lock()
         self._callbacks_enabled = True
+        self.succeeded: bool | None = None
         # Python owns the runnable and its signal object.  Deleting the wrapper
         # from its worker thread can strand Qt while queued callbacks unwind.
         self.setAutoDelete(False)
@@ -41,9 +42,11 @@ class FunctionTask(QRunnable):
         try:
             result = self._function()
         except Exception:
+            self.succeeded = False
             if self._can_emit():
                 self.signals.failed.emit("Background operation failed")
         else:
+            self.succeeded = True
             if self._can_emit():
                 self.signals.succeeded.emit(result)
         finally:
