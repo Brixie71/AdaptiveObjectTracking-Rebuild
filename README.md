@@ -137,3 +137,44 @@ deterministic backends and requires no model weights, camera, network, GUI, or
 CUDA device. Gate 3 does not implement target selection, local tracking,
 encoders, cross-camera identity, persistence, saved profiles, retention, or the
 PyQt UI.
+
+## Gate 4 native three-camera UI
+
+Gate 4 adds a native PyQt5 desktop window with three stable camera slots,
+asynchronous Start and Stop controls, source-local health states, detection
+overlays, and a Settings > Hardware Testing section. One to three enabled
+sources are supported in configured order; unused slots remain visibly
+unconfigured, and more than three enabled sources fail before capture starts.
+
+Launch the application from the repository root:
+
+```powershell
+python scripts/run_app.py
+```
+
+Use `--app-config`, `--camera-config`, `--env-file`, `--model-manifest`, and
+`--models-dir` to select ignored local configuration where needed. The
+checked-in application example keeps detection disabled, which provides raw
+preview without loading a model. Enabling detection requires a verified
+role-`detector` manifest entry and artifact as described in the Gate 3 section.
+
+Hardware Testing runs source probes, bounded USB discovery, and the detector
+probe outside the GUI thread. Its tables show project-owned sanitized fields;
+they never display resolved RTSP URLs or raw exception details. Gate 4 does not
+save successful configurations. Named profile saving remains Gate 10.
+
+Run the deterministic native UI acceptance without cameras or model weights:
+
+```powershell
+$env:QT_QPA_PLATFORM = "offscreen"
+python -m pytest tests/offline/test_three_source_capture.py tests/offline/test_gate3_detection_acceptance.py tests/offline/test_gate4_three_camera_ui.py -v
+python -m pytest -q
+```
+
+The automated acceptance covers three source-local displays, blocked fake
+inference while the Qt heartbeat remains responsive, detection provenance,
+FAILED/EOF isolation, Stop usability, and bounded repeated shutdown. It does
+not establish physical three-camera operation, real-model accuracy, or
+end-to-end performance. Target selection, local tracking, dual encoders, ReID,
+cross-camera identity, persistence, retention, and saved profiles remain later
+gates.

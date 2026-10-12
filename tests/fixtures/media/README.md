@@ -18,3 +18,9 @@ backend supplies people and generic-object rows so allowlist filtering and
 three-source failure isolation are reproducible without network access or
 model weights. These tests do not establish real-model accuracy or hardware
 performance.
+
+Gate 4 reuses the same CC0 fixture as three independent configured offline
+sources for deterministic native-display, responsiveness, source-local
+provenance, failure-isolation, and shutdown proof. The test uses an injected
+deterministic detector and an offscreen Qt platform; it does not prove physical
+camera throughput, real-model behavior, or retained media handling.
