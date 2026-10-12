@@ -178,3 +178,33 @@ not establish physical three-camera operation, real-model accuracy, or
 end-to-end performance. Target selection, local tracking, dual encoders, ReID,
 cross-camera identity, persistence, retention, and saved profiles remain later
 gates.
+
+## Gate 5 target selection
+
+Gate 5 lets the user click a detection box in any live camera panel to create
+one application-level selected target. The target holds an owned in-memory BGR
+crop plus its source ID, exact displayed-frame sequence and timestamp, class,
+confidence, clipped half-open pixel box, target ID, and UTC selection time.
+The selected-target panel shows the crop and safe metadata. A later valid click
+replaces the current target; **Disable / Disengage Target** clears it.
+
+Clicks in preview letterbox/pillarbox margins do nothing. A frame click with no
+candidate reports that no selectable target is present and preserves the
+current target. Where boxes overlap, selection prefers highest confidence,
+then the smaller clipped area, then original detector order. Selection is
+enabled only while the live runtime is running, but stopping live view does not
+discard the current in-memory target.
+
+Run Gate 2-5 deterministic offline acceptance and the complete suite with:
+
+```powershell
+$env:QT_QPA_PLATFORM = "offscreen"
+python -m pytest tests/offline/test_three_source_capture.py tests/offline/test_gate3_detection_acceptance.py tests/offline/test_gate4_three_camera_ui.py tests/offline/test_gate5_target_selection.py -v
+python -m pytest -q
+```
+
+Gate 5 creates no retained crops or other files and adds no configuration or
+database schema. Targets exist only for the application session. Physical
+camera selection and real-model selection remain unrun. Local tracking, dual
+encoders, ReID, cross-camera identity, persistence/retention, uploads, target
+naming, save/load, and named profiles remain later gates.
