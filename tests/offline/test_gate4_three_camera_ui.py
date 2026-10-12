@@ -18,6 +18,7 @@ from aot.config.types import (
 )
 from aot.detection.types import BoundingBox, Detection, DetectionBatch
 from aot.runtime.live_runtime import LiveRuntime
+from aot.selection.target_selector import TargetSelector
 from aot.ui.main_window import MainWindow
 from aot.ui.rendering import describe_overlays
 
@@ -163,7 +164,11 @@ def test_three_camera_ui_responsiveness_isolation_and_clean_shutdown(qtbot) -> N
         return manager
 
     runtime = LiveRuntime(app_settings(), capture_factory, lambda: detector)
-    window = MainWindow(runtime, refresh_interval_ms=10)
+    window = MainWindow(
+        runtime,
+        target_selector=TargetSelector(),
+        refresh_interval_ms=10,
+    )
     qtbot.addWidget(window)
     window.show()
     heartbeat = []
