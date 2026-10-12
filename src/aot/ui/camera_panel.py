@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import numpy as np
 from PyQt5.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QResizeEvent
 from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout
 
-from aot.capture.types import SourceState
-from aot.runtime.types import SourceRuntimeSnapshot
+from aot.capture.types import FramePacket, SourceState
+from aot.runtime.types import ProcessedFrame, SourceRuntimeSnapshot
 from aot.selection.geometry import map_preview_point_to_frame
 from aot.ui.rendering import FrameRenderingError, render_processed_frame
 
@@ -20,6 +21,22 @@ _STATUS_TEXT = {
     SourceState.EOF: "End of stream",
     SourceState.FAILED: "Unavailable",
 }
+
+
+def _owned_processed_frame(result: ProcessedFrame) -> ProcessedFrame:
+    """Freeze the exact frame snapshot shared by rendering and selection."""
+    frame = result.packet.frame
+    if not isinstance(frame, np.ndarray):
+        return result
+    owned_frame = np.array(frame, copy=True, order="C")
+    owned_frame.setflags(write=False)
+    packet = FramePacket(
+        result.packet.source_id,
+        result.packet.sequence,
+        result.packet.captured_at_monotonic_ns,
+        owned_frame,
+    )
+    return ProcessedFrame(packet, result.detections, result.processing_error)
 
 
 class CameraPanel(QFrame):
@@ -86,15 +103,16 @@ class CameraPanel(QFrame):
         self._set_status(status, snapshot.capture.state.value)
 
         if snapshot.result is not None:
+            displayed_result = _owned_processed_frame(snapshot.result)
             try:
-                self._image = render_processed_frame(snapshot.result)
+                self._image = render_processed_frame(displayed_result)
             except FrameRenderingError:
                 self._image = None
                 self._displayed_result = None
                 self.image_label.clear()
                 self.image_label.setText("Preview unavailable")
             else:
-                self._displayed_result = snapshot.result
+                self._displayed_result = displayed_result
                 self._refresh_pixmap()
         else:
             self._displayed_result = None

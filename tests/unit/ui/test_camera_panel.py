@@ -134,7 +134,8 @@ def test_click_maps_aspect_fit_point_and_emits_exact_displayed_frame(qtbot) -> N
     qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
 
     assert len(selected) == 1
-    assert selected[0][0] is current.result
+    assert selected[0][0].packet.source_id == current.result.packet.source_id
+    assert np.array_equal(selected[0][0].packet.frame, current.result.packet.frame)
     assert selected[0][1:] == [100.0, 50.0]
 
 
@@ -165,7 +166,7 @@ def test_new_snapshot_replaces_retained_selectable_frame(qtbot) -> None:
     qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
 
     assert len(selected) == 1
-    assert selected[0][0] is second.result
+    assert selected[0][0].packet.sequence == second.result.packet.sequence
 
 
 @pytest.mark.parametrize("snapshot_value", [None, snapshot(SourceState.OPEN, sequence=None)])
@@ -209,5 +210,37 @@ def test_resize_recomputes_mapping_without_replacing_frame(qtbot) -> None:
 
     qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(200, 100))
 
-    assert selected[0][0] is current.result
+    assert selected[0][0].packet.sequence == current.result.packet.sequence
     assert selected[0][1:] == [100.0, 50.0]
+
+
+def test_rendered_selection_owns_frame_against_later_source_mutation(qtbot) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    panel.image_label.setFixedSize(200, 200)
+    current = selectable_snapshot()
+    panel.apply_snapshot(current)
+    panel.set_selection_enabled(True)
+    current.result.packet.frame[:] = 255
+    selected = QSignalSpy(panel.selection_requested)
+
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
+
+    assert len(selected) == 1
+    displayed = selected[0][0]
+    assert displayed is not current.result
+    assert np.all(displayed.packet.frame == 0)
+    assert displayed.packet.frame.flags.writeable is False
+
+
+def test_odd_sized_first_bottom_margin_pixel_does_not_emit(qtbot) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    panel.image_label.setFixedSize(641, 600)
+    panel.apply_snapshot(selectable_snapshot())
+    panel.set_selection_enabled(True)
+    selected = QSignalSpy(panel.selection_requested)
+
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(320, 540))
+
+    assert len(selected) == 0

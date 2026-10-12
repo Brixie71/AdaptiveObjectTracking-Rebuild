@@ -72,11 +72,14 @@ def map_preview_point_to_frame(
     ):
         raise ValueError("Invalid preview mapping values")
 
-    scale = min(preview_width / frame_width, preview_height / frame_height)
-    rendered_width = frame_width * scale
-    rendered_height = frame_height * scale
-    offset_x = (preview_width - rendered_width) / 2.0
-    offset_y = (preview_height - rendered_height) / 2.0
+    if preview_width / frame_width <= preview_height / frame_height:
+        rendered_width = int(preview_width)
+        rendered_height = int(frame_height * preview_width / frame_width)
+    else:
+        rendered_height = int(preview_height)
+        rendered_width = int(frame_width * preview_height / frame_height)
+    offset_x = math.floor((preview_width - rendered_width) / 2.0)
+    offset_y = math.floor((preview_height - rendered_height) / 2.0)
     local_x = click_x - offset_x
     local_y = click_y - offset_y
     if (
@@ -86,4 +89,7 @@ def map_preview_point_to_frame(
         or local_y >= rendered_height
     ):
         return None
-    return local_x / scale, local_y / scale
+    return (
+        local_x * frame_width / rendered_width,
+        local_y * frame_height / rendered_height,
+    )

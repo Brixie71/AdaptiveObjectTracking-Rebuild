@@ -35,6 +35,8 @@ class SelectedTargetPanel(QFrame):
         self.frame_label = QLabel(self)
         self.selected_at_label = QLabel(self)
         self.box_label = QLabel(self)
+        for label in self._metadata_labels:
+            label.setTextFormat(Qt.PlainText)
         self.disengage_button = QPushButton("Disable / Disengage Target", self)
         self.disengage_button.clicked.connect(self.disengage_requested.emit)
         self._image: QImage | None = None

@@ -59,6 +59,18 @@ def test_preview_mapping_rejects_letterbox_and_pillarbox_margins() -> None:
     assert map_preview_point_to_frame(75, 50, 100, 100, 100, 200) is None
 
 
+def test_preview_mapping_uses_integer_qt_pixmap_edges_for_odd_preview() -> None:
+    # Qt scales 640x480 to 641x480 and centers it at y=60 in a 641x600 label.
+    assert map_preview_point_to_frame(320, 59, 641, 600, 640, 480) is None
+    assert map_preview_point_to_frame(320, 60, 641, 600, 640, 480) == pytest.approx(
+        (320 * 640 / 641, 0.0)
+    )
+    assert map_preview_point_to_frame(320, 539, 641, 600, 640, 480) == pytest.approx(
+        (320 * 640 / 641, 479.0)
+    )
+    assert map_preview_point_to_frame(320, 540, 641, 600, 640, 480) is None
+
+
 @pytest.mark.parametrize(
     "values",
     [

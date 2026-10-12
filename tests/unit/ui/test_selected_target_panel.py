@@ -72,6 +72,20 @@ def test_apply_target_shows_safe_reference_metadata_and_crop(qtbot) -> None:
     assert "PRIVATE" not in visible_text
 
 
+def test_dynamic_metadata_is_always_plain_text(qtbot) -> None:
+    panel = SelectedTargetPanel()
+    qtbot.addWidget(panel)
+    target = selected_target()
+    object.__setattr__(target, "class_name", "<b>person</b>")
+    object.__setattr__(target, "source_id", "<i>camera-a</i>")
+
+    panel.apply_target(target)
+
+    assert panel.class_label.textFormat() == Qt.PlainText
+    assert panel.source_label.textFormat() == Qt.PlainText
+    assert panel.class_label.text() == "Class: <b>person</b> (91%)"
+
+
 def test_disengage_button_emits_intent_once_without_clearing_state(qtbot) -> None:
     panel = SelectedTargetPanel()
     qtbot.addWidget(panel)
