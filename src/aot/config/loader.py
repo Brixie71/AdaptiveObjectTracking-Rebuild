@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from .types import (
     AppSettings,
     CameraSourceConfig,
+    CaptureRuntimeConfig,
     ComputeConfig,
     ComputePreference,
     SourceType,
@@ -100,6 +101,55 @@ def _load_compute(value: Any, path: Path) -> ComputeConfig:
     if isinstance(cuda_index, bool) or not isinstance(cuda_index, int) or cuda_index < 0:
         raise ConfigError(f"compute.cuda_index must be a nonnegative integer in {path}")
     return ComputeConfig(preference=preference, cuda_index=cuda_index)
+
+
+def _load_capture(value: Any, path: Path) -> CaptureRuntimeConfig:
+    if value is None:
+        return CaptureRuntimeConfig()
+    if not isinstance(value, dict):
+        raise ConfigError(f"capture must be a mapping in {path}")
+    _reject_unknown(
+        value,
+        {
+            "queue_capacity",
+            "reconnect_initial_seconds",
+            "reconnect_max_seconds",
+            "shutdown_timeout_seconds",
+        },
+        path,
+        "capture",
+    )
+    queue_capacity = _positive_integer(
+        value.get("queue_capacity", 2),
+        "capture.queue_capacity",
+        path,
+    )
+    reconnect_initial = _positive_number(
+        value.get("reconnect_initial_seconds", 0.25),
+        "capture.reconnect_initial_seconds",
+        path,
+    )
+    reconnect_max = _positive_number(
+        value.get("reconnect_max_seconds", 5.0),
+        "capture.reconnect_max_seconds",
+        path,
+    )
+    shutdown_timeout = _positive_number(
+        value.get("shutdown_timeout_seconds", 5.0),
+        "capture.shutdown_timeout_seconds",
+        path,
+    )
+    if reconnect_max < reconnect_initial:
+        raise ConfigError(
+            f"capture.reconnect_max_seconds must be at least "
+            f"capture.reconnect_initial_seconds in {path}"
+        )
+    return CaptureRuntimeConfig(
+        queue_capacity=queue_capacity,
+        reconnect_initial_seconds=reconnect_initial,
+        reconnect_max_seconds=reconnect_max,
+        shutdown_timeout_seconds=shutdown_timeout,
+    )
 
 
 def _load_source(value: Any, path: Path) -> CameraSourceConfig:
@@ -204,7 +254,7 @@ def load_settings(
     cameras = _load_mapping(cameras_path)
     _reject_unknown(
         app,
-        {"schema_version", "runtime_dir", "log_level", "compute"},
+        {"schema_version", "runtime_dir", "log_level", "compute", "capture"},
         app_path,
         "application configuration",
     )
@@ -234,6 +284,7 @@ def load_settings(
         log_level=log_level,
         compute=_load_compute(app.get("compute"), app_path),
         sources=sources,
+        capture=_load_capture(app.get("capture"), app_path),
     )
 
 

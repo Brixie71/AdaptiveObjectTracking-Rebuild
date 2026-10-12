@@ -4,3 +4,8 @@ log_level: INFO
 compute:
   preference: auto
   cuda_index: 0
+capture:
+  queue_capacity: 2
+  reconnect_initial_seconds: 0.25
+  reconnect_max_seconds: 5.0
+  shutdown_timeout_seconds: 5.0

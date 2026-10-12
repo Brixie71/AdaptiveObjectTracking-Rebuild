@@ -44,3 +44,41 @@ python scripts/check_environment.py --json
 The diagnostic validates Windows/Python architecture, installed distributions, configuration, the model manifest, compute capability, and structured-log writability. A machine without usable CUDA may report a CPU-fallback warning, but startup must not crash. A missing or unloadable PyTorch installation is a failure because neither CPU nor GPU inference would be usable.
 
 Gate 1 is accepted only when the test suite and `pip check` pass and both diagnostic commands exit successfully on the intended machine. Sanitized JSON may then be recorded as Gate 1 evidence.
+
+## Gate 2 camera layer
+
+Gate 2 adds project-owned USB, RTSP, and finite offline-video adapters; canonical BGR frame normalization; bounded per-source buffers; independent capture workers with capped reconnection; and sanitized Hardware Testing services. Detection, tracking, ReID, identity, persistence, and the desktop UI remain outside this gate.
+
+Run the automated suite and deterministic three-source offline acceptance from the repository root:
+
+```powershell
+python -m pytest -q
+python -m pytest tests/offline/test_three_source_capture.py -v
+python -m pip check
+```
+
+The committed three-frame MJPG fixture is generated entirely from NumPy arrays and can be reproduced with:
+
+```powershell
+python scripts/generate_gate2_fixture.py
+```
+
+Probe configured sources through the same service intended for the Settings > Hardware Testing module:
+
+```powershell
+python scripts/probe_cameras.py --app-config config/app.example.yaml --camera-config config/cameras.example.yaml --json
+python scripts/probe_cameras.py --camera-config config/cameras.local.yaml --source-id usb-1 --frames 30
+```
+
+Committed examples are disabled, so the first probe command intentionally exits `1` with a sanitized, actionable message. RTSP configuration contains only an environment-variable key; the resolved URL is used immediately before opening and is never included in results or logs.
+
+Physical-device checks are opt-in and require an ignored local camera configuration:
+
+```powershell
+$env:AOT_RUN_HARDWARE_TESTS = "1"
+$env:AOT_HARDWARE_CAMERA_CONFIG = "config/cameras.local.yaml"
+$env:AOT_HARDWARE_SOURCE_IDS = "usb-1,cctv-1,cctv-2"
+python -m pytest tests/hardware/test_camera_sources.py -v
+```
+
+Optional `AOT_HARDWARE_FRAME_COUNT` and `AOT_HARDWARE_TIMEOUT_SECONDS` values control the live sample size and concurrent wait. Do not put URLs, usernames, passwords, or query tokens in command arguments, source IDs, or committed YAML. Gate 2 does not claim live USB/RTSP acceptance until these checks pass on named hardware.

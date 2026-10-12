@@ -75,6 +75,44 @@ def test_load_settings_parses_all_sources_and_resolves_relative_paths(tmp_path) 
     assert settings.sources[2].offline_path == tmp_path / "media" / "demo.mp4"
 
 
+def test_capture_policy_uses_bounded_runtime_defaults(tmp_path) -> None:
+    app_path, cameras_path = _write_configs(tmp_path)
+
+    settings = load_settings(app_path, cameras_path)
+
+    assert settings.capture.queue_capacity == 2
+    assert settings.capture.reconnect_initial_seconds == 0.25
+    assert settings.capture.reconnect_max_seconds == 5.0
+    assert settings.capture.shutdown_timeout_seconds == 5.0
+
+
+@pytest.mark.parametrize(
+    "capture",
+    [
+        "  unknown: 1",
+        "  queue_capacity: true",
+        "  queue_capacity: 0",
+        "  queue_capacity: 1.5",
+        "  reconnect_initial_seconds: false",
+        "  reconnect_initial_seconds: 0",
+        "  reconnect_initial_seconds: .inf",
+        "  reconnect_max_seconds: -1",
+        "  reconnect_max_seconds: .nan",
+        "  shutdown_timeout_seconds: zero",
+        "  shutdown_timeout_seconds: 0",
+        "  reconnect_initial_seconds: 2\n  reconnect_max_seconds: 1",
+    ],
+)
+def test_capture_policy_rejects_invalid_values(tmp_path, capture: str) -> None:
+    app = VALID_APP + "capture:\n" + capture + "\n"
+    app_path, cameras_path = _write_configs(tmp_path, app=app)
+
+    with pytest.raises(ConfigError) as error:
+        load_settings(app_path, cameras_path)
+
+    assert "capture" in str(error.value).lower() or "reconnect" in str(error.value).lower()
+
+
 @pytest.mark.parametrize(
     ("app", "cameras", "unknown_key"),
     [

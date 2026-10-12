@@ -9,6 +9,7 @@ from typing import Any
 from .types import (
     AppSettings,
     CameraSourceConfig,
+    CaptureRuntimeConfig,
     ComputeConfig,
     ComputePreference,
     SourceType,
@@ -17,6 +18,7 @@ from .types import (
 __all__ = [
     "AppSettings",
     "CameraSourceConfig",
+    "CaptureRuntimeConfig",
     "ConfigError",
     "ComputeConfig",
     "ComputePreference",
