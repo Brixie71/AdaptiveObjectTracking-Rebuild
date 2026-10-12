@@ -9,6 +9,7 @@ from PyQt5.QtCore import QRect
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPen
 
 from aot.runtime.types import ProcessedFrame
+from aot.selection.geometry import clip_box
 
 
 class FrameRenderingError(ValueError):
@@ -63,15 +64,12 @@ def describe_overlays(result: ProcessedFrame) -> tuple[OverlayDescription, ...]:
     frame_height, frame_width = result.packet.frame.shape[:2]
     descriptions: list[OverlayDescription] = []
     for detection in batch.detections:
-        x1 = max(0, min(frame_width - 1, int(round(detection.box.x1))))
-        y1 = max(0, min(frame_height - 1, int(round(detection.box.y1))))
-        x2 = max(0, min(frame_width - 1, int(round(detection.box.x2))))
-        y2 = max(0, min(frame_height - 1, int(round(detection.box.y2))))
-        if x2 < x1 or y2 < y1:
+        box = clip_box(detection.box, frame_width, frame_height)
+        if box is None:
             continue
         descriptions.append(
             OverlayDescription(
-                (x1, y1, x2, y2),
+                (box.left, box.top, box.right, box.bottom),
                 f"{detection.class_name} {detection.confidence:.0%}",
             )
         )

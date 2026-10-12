@@ -53,7 +53,7 @@ def test_overlay_description_clips_boxes_and_formats_label(qapp) -> None:
     descriptions = describe_overlays(result_with_detection())
 
     assert len(descriptions) == 1
-    assert descriptions[0].box == (0, 2, 19, 9)
+    assert descriptions[0].box == (0, 2, 20, 10)
     assert descriptions[0].label == "person 88%"
     assert not render_processed_frame(result_with_detection()).isNull()
 
