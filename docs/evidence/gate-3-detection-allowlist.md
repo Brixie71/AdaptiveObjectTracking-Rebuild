@@ -8,6 +8,8 @@
 
 **Implementation commit before evidence-only documentation:** `55aa3ed0d425e005ca2f65e5f59d30f5c00a2dce`
 
+**Final review fix commit:** `d2c4f53`
+
 **Scope:** Strict detector configuration, verified detector-artifact resolution,
 immutable detection contracts, Ultralytics YOLOv8 result adaptation,
 people/generic-object allowlist enforcement, sanitized Hardware Testing model
@@ -53,7 +55,7 @@ worktree `src` directory first on `PYTHONPATH`.
 
 ```powershell
 python -m pytest -q
-# exit 0; 292 passed, 1 skipped
+# exit 0; 302 passed, 1 skipped
 
 python -m pytest tests/offline/test_gate3_detection_acceptance.py -v
 # exit 0; 1 passed
@@ -72,6 +74,12 @@ artifact-role and SHA-256 verification, malformed/non-finite detector rows,
 box clipping, maximum-result bounds, compute-device propagation, adapter
 cleanup, sanitized failures, nearest-rank timing, capture provenance, and
 three-source detector failure isolation.
+
+The fresh whole-branch review found no Critical issues. Its five Important
+findings were corrected with RED-to-GREEN regressions covering traceback-level
+exception-chain redaction, lazy iterable failures, missing-versus-empty box
+results, boolean/string scalar rejection, and third-party stdout/log containment
+for valid JSON output.
 
 ## Credential scan
 
