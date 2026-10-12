@@ -11,3 +11,10 @@
 - SHA-256: `dd607536bed2fb9493bedfea68600e6a10af88c6073a5f94b2c4711e38bd2080`
 
 The generator reopens the file and requires exactly three decodable BGR frames before returning the checksum.
+
+Gate 3 reuses this fixture to verify capture-to-detection source, sequence,
+timestamp, and frame-size provenance. An injected deterministic detector
+backend supplies people and generic-object rows so allowlist filtering and
+three-source failure isolation are reproducible without network access or
+model weights. These tests do not establish real-model accuracy or hardware
+performance.
