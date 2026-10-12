@@ -7,6 +7,7 @@ from aot.config.types import (
     CameraSourceConfig,
     ComputeConfig,
     ComputePreference,
+    DetectionConfig,
     SourceType,
 )
 
@@ -47,6 +48,7 @@ def test_configuration_enums_accept_only_supported_values(
 
 def test_configuration_records_are_immutable(tmp_path) -> None:
     compute = ComputeConfig()
+    detection = DetectionConfig()
     source = CameraSourceConfig(
         source_id="camera-1",
         name="Camera 1",
@@ -59,10 +61,12 @@ def test_configuration_records_are_immutable(tmp_path) -> None:
         log_level="INFO",
         compute=compute,
         sources=(source,),
+        detection=detection,
     )
 
     for record, attribute in (
         (compute, "cuda_index"),
+        (detection, "enabled"),
         (source, "enabled"),
         (settings, "log_level"),
     ):

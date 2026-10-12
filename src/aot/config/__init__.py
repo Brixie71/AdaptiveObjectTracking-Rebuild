@@ -12,6 +12,7 @@ from .types import (
     CaptureRuntimeConfig,
     ComputeConfig,
     ComputePreference,
+    DetectionConfig,
     SourceType,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "ConfigError",
     "ComputeConfig",
     "ComputePreference",
+    "DetectionConfig",
     "ModelManifest",
     "ModelManifestError",
     "ModelSpec",
