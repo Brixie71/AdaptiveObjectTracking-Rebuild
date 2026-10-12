@@ -5,6 +5,7 @@ from aot.ui.background_task import FunctionTask
 from aot.ui.controller import RuntimeController
 from aot.ui.hardware_testing_panel import HardwareTestingPanel
 from aot.ui.main_window import MainWindow
+from aot.ui.selected_target_panel import SelectedTargetPanel
 from aot.ui.settings_dialog import SettingsDialog
 from aot.ui.rendering import (
     FrameRenderingError,
@@ -22,6 +23,7 @@ __all__ = [
     "MainWindow",
     "OverlayDescription",
     "RuntimeController",
+    "SelectedTargetPanel",
     "SettingsDialog",
     "describe_overlays",
     "frame_to_qimage",
