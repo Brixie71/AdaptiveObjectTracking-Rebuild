@@ -13,3 +13,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "hardware: opt-in tests requiring authorized physical camera devices",
+]
