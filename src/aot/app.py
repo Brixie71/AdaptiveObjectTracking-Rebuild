@@ -24,6 +24,7 @@ from aot.hardware_testing.source_probe import probe_sources
 from aot.hardware_testing.types import DetectorTestResult, HardwareTestStatus
 from aot.hardware_testing.usb_discovery import discover_usb_devices
 from aot.runtime.live_runtime import LiveRuntime
+from aot.selection.target_selector import TargetSelector
 from aot.telemetry.device_probe import probe_compute_device
 from aot.ui.main_window import MainWindow
 from aot.ui.settings_dialog import SettingsDialog
@@ -154,6 +155,7 @@ def create_main_window(
     detector_probe_fn: Callable,
     probe_sources_fn=probe_sources,
     discover_usb_fn=discover_usb_devices,
+    target_selector_factory: Callable[[], TargetSelector] = TargetSelector,
 ) -> MainWindow:
     """Compose widgets with probe services while keeping widgets service-free."""
 
@@ -166,7 +168,12 @@ def create_main_window(
             parent,
         )
 
-    return MainWindow(runtime, settings_factory=settings_factory)
+    target_selector = target_selector_factory()
+    return MainWindow(
+        runtime,
+        target_selector=target_selector,
+        settings_factory=settings_factory,
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -193,6 +200,7 @@ def main(
     capture_manager_factory=CaptureManager,
     application_factory=QApplication,
     window_factory=create_main_window,
+    target_selector_factory=TargetSelector,
 ) -> int:
     """Run the native Qt application with sanitized process-boundary errors."""
     args = _parser().parse_args(argv)
@@ -229,6 +237,7 @@ def main(
             runtime=runtime,
             settings=settings,
             detector_probe_fn=_detector_probe_service(detector_factory, compute),
+            target_selector_factory=target_selector_factory,
         )
         window.show()
     except Exception:

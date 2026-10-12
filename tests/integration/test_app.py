@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from aot.app import build_runtime, main
+from aot.app import build_runtime, create_main_window, main
 from aot.config.model_manifest import ModelManifest
 from aot.config.types import (
     AppSettings,
@@ -60,6 +60,51 @@ class FakeProcessing:
 
     def join(self, _timeout=None):
         return True
+
+
+def test_create_main_window_injects_exactly_one_supplied_selector(
+    monkeypatch,
+) -> None:
+    created = []
+    captured = {}
+    selector = object()
+
+    class CapturingWindow:
+        def __init__(self, runtime, **kwargs):
+            captured["runtime"] = runtime
+            captured.update(kwargs)
+
+    def selector_factory():
+        created.append(selector)
+        return selector
+
+    monkeypatch.setattr("aot.app.MainWindow", CapturingWindow)
+    runtime = object()
+    window = create_main_window(
+        runtime=runtime,
+        settings=settings(source("one")),
+        detector_probe_fn=lambda: None,
+        target_selector_factory=selector_factory,
+    )
+
+    assert isinstance(window, CapturingWindow)
+    assert created == [selector]
+    assert captured["runtime"] is runtime
+    assert captured["target_selector"] is selector
+
+
+def test_main_does_not_construct_selector_before_runtime_validation(capsys) -> None:
+    selector_calls = []
+
+    result = main(
+        [],
+        settings_loader=lambda *_args: settings(),
+        target_selector_factory=lambda: selector_calls.append("selector"),
+    )
+
+    assert result == 1
+    assert selector_calls == []
+    assert capsys.readouterr().err == "Application could not be initialized.\n"
 
 
 def test_build_runtime_skips_all_detector_dependencies_when_disabled() -> None:
