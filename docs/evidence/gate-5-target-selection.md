@@ -9,7 +9,7 @@
 
 **Implementation baseline before acceptance documentation:** `8364d2a`
 
-**Final reviewed commit:** Pending whole-branch review
+**Final reviewed implementation commit:** `c03e99095da905517cbeba3dd81b7fb3819a8045`
 
 **Scope:** Exact displayed-frame hit testing, deterministic overlap precedence,
 validated owned reference crops, one session-only selected-target state,
@@ -42,7 +42,7 @@ python -m pytest tests/offline/test_three_source_capture.py tests/offline/test_g
 # exit 0; 4 passed
 
 python -m pytest -q
-# exit 0; 442 passed, 1 skipped
+# exit 0; 446 passed, 1 skipped
 
 python -m pip check
 # exit 0; No broken requirements found.
@@ -67,6 +67,14 @@ Letterbox-margin and in-frame empty clicks preserve the current target. A valid
 click on another camera replaces it. The native disengage button clears both
 selector state and crop presentation. A Qt heartbeat continues, then Stop and
 window shutdown release processing and detector ownership.
+
+The single whole-branch review found no Critical issues. Its two behavioral
+Important findings were corrected at `c03e990`: preview mapping now follows
+Qt's integer aspect-fit pixmap edges, and rendering plus selection share one
+owned, read-only frame snapshot. Regressions cover odd-sized margin pixels and
+source-frame mutation after rendering. The review's evidence-refresh item and
+two Minor documentation/plain-text hardening items were also resolved before
+the complete verification above was rerun on that commit.
 
 ## Hardware and model proof boundary
 
