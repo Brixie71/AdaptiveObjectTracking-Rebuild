@@ -10,6 +10,8 @@ from .types import (
     FrameSource,
     SourceState,
 )
+from .offline import OfflineFrameSource
+from .usb import UsbFrameSource
 
 __all__ = [
     "CaptureError",
@@ -19,5 +21,7 @@ __all__ = [
     "EndOfStream",
     "FramePacket",
     "FrameSource",
+    "OfflineFrameSource",
     "SourceState",
+    "UsbFrameSource",
 ]
