@@ -9,6 +9,7 @@ from .types import (
     DetectorInferenceError,
     DetectorLoadError,
 )
+from .factory import create_detector
 
 __all__ = [
     "BoundingBox",
@@ -18,4 +19,5 @@ __all__ = [
     "Detector",
     "DetectorInferenceError",
     "DetectorLoadError",
+    "create_detector",
 ]
