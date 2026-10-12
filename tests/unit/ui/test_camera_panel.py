@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QPoint, Qt
+from PyQt5.QtTest import QSignalSpy
 
 from aot.capture.types import FramePacket, SourceState
 from aot.capture.worker import WorkerSnapshot
 from aot.config.types import SourceType
+from aot.detection.types import BoundingBox, Detection, DetectionBatch
 from aot.runtime.types import ProcessedFrame, SourceRuntimeSnapshot
 from aot.ui.camera_panel import CameraPanel
 
@@ -32,6 +34,28 @@ def snapshot(
         "Front Door",
         SourceType.USB,
         WorkerSnapshot("camera-1", state, 0, 0, last_error, state is SourceState.OPEN),
+        result,
+    )
+
+
+def selectable_snapshot(sequence: int = 1, *, malformed: bool = False):
+    frame = np.zeros((100, 200, 3), dtype=np.float32 if malformed else np.uint8)
+    packet = FramePacket("camera-1", sequence, sequence, frame)
+    batch = DetectionBatch(
+        "camera-1",
+        sequence,
+        sequence,
+        200,
+        100,
+        (Detection(0, "person", 0.9, BoundingBox(20, 20, 180, 80)),),
+        0,
+    )
+    result = ProcessedFrame(packet, batch, None)
+    return SourceRuntimeSnapshot(
+        "camera-1",
+        "Front Door",
+        SourceType.USB,
+        WorkerSnapshot("camera-1", SourceState.OPEN, 0, 0, None, True),
         result,
     )
 
@@ -96,3 +120,94 @@ def test_processing_failure_uses_fixed_summary(qtbot) -> None:
 
     assert panel.status_label.text() == "Live · Detection unavailable"
     assert "PRIVATE" not in panel.status_label.text()
+
+
+def test_click_maps_aspect_fit_point_and_emits_exact_displayed_frame(qtbot) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    panel.image_label.setFixedSize(200, 200)
+    current = selectable_snapshot()
+    panel.apply_snapshot(current)
+    panel.set_selection_enabled(True)
+    selected = QSignalSpy(panel.selection_requested)
+
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
+
+    assert len(selected) == 1
+    assert selected[0][0] is current.result
+    assert selected[0][1:] == [100.0, 50.0]
+
+
+def test_letterbox_margin_click_does_not_emit(qtbot) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    panel.image_label.setFixedSize(200, 200)
+    panel.apply_snapshot(selectable_snapshot())
+    panel.set_selection_enabled(True)
+    selected = QSignalSpy(panel.selection_requested)
+
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 25))
+
+    assert len(selected) == 0
+
+
+def test_new_snapshot_replaces_retained_selectable_frame(qtbot) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    panel.image_label.setFixedSize(200, 200)
+    first = selectable_snapshot(1)
+    second = selectable_snapshot(2)
+    panel.apply_snapshot(first)
+    panel.apply_snapshot(second)
+    panel.set_selection_enabled(True)
+    selected = QSignalSpy(panel.selection_requested)
+
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
+
+    assert len(selected) == 1
+    assert selected[0][0] is second.result
+
+
+@pytest.mark.parametrize("snapshot_value", [None, snapshot(SourceState.OPEN, sequence=None)])
+def test_unconfigured_or_missing_result_cannot_emit(qtbot, snapshot_value) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    panel.image_label.setFixedSize(200, 200)
+    panel.apply_snapshot(selectable_snapshot())
+    panel.apply_snapshot(snapshot_value)
+    panel.set_selection_enabled(True)
+    selected = QSignalSpy(panel.selection_requested)
+
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
+
+    assert len(selected) == 0
+
+
+def test_malformed_preview_and_disabled_selection_cannot_emit(qtbot) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    panel.image_label.setFixedSize(200, 200)
+    selected = QSignalSpy(panel.selection_requested)
+    panel.apply_snapshot(selectable_snapshot(malformed=True))
+    panel.set_selection_enabled(True)
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
+    panel.apply_snapshot(selectable_snapshot())
+    panel.set_selection_enabled(False)
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(100, 100))
+
+    assert len(selected) == 0
+
+
+def test_resize_recomputes_mapping_without_replacing_frame(qtbot) -> None:
+    panel = CameraPanel()
+    qtbot.addWidget(panel)
+    current = selectable_snapshot()
+    panel.image_label.setFixedSize(400, 200)
+    panel.apply_snapshot(current)
+    panel.set_selection_enabled(True)
+    selected = QSignalSpy(panel.selection_requested)
+
+    qtbot.mouseClick(panel.image_label, Qt.LeftButton, pos=QPoint(200, 100))
+
+    assert selected[0][0] is current.result
+    assert selected[0][1:] == [100.0, 50.0]

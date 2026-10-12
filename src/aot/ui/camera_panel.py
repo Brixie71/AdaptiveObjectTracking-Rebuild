@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QResizeEvent
 from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from aot.capture.types import SourceState
 from aot.runtime.types import SourceRuntimeSnapshot
+from aot.selection.geometry import map_preview_point_to_frame
 from aot.ui.rendering import FrameRenderingError, render_processed_frame
 
 
@@ -24,6 +25,8 @@ _STATUS_TEXT = {
 class CameraPanel(QFrame):
     """Present one source without performing capture or model work."""
 
+    selection_requested = pyqtSignal(object, float, float)
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("cameraPanel")
@@ -39,7 +42,10 @@ class CameraPanel(QFrame):
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setMinimumSize(160, 100)
         self.image_label.setStyleSheet("background: #121820; color: #8996a8;")
+        self.image_label.installEventFilter(self)
         self._image: QImage | None = None
+        self._displayed_result = None
+        self._selection_enabled = False
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.name_label)
@@ -61,6 +67,7 @@ class CameraPanel(QFrame):
             self.source_label.setText("No source assigned")
             self._set_status("Unconfigured", "unconfigured")
             self._image = None
+            self._displayed_result = None
             self.image_label.clear()
             self.image_label.setText("No preview")
             return
@@ -83,10 +90,45 @@ class CameraPanel(QFrame):
                 self._image = render_processed_frame(snapshot.result)
             except FrameRenderingError:
                 self._image = None
+                self._displayed_result = None
                 self.image_label.clear()
                 self.image_label.setText("Preview unavailable")
             else:
+                self._displayed_result = snapshot.result
                 self._refresh_pixmap()
+        else:
+            self._displayed_result = None
+
+    def set_selection_enabled(self, enabled: bool) -> None:
+        self._selection_enabled = bool(enabled)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if (
+            watched is self.image_label
+            and event.type() == QEvent.MouseButtonPress
+            and event.button() == Qt.LeftButton
+        ):
+            self._handle_preview_click(event.pos().x(), event.pos().y())
+        return super().eventFilter(watched, event)
+
+    def _handle_preview_click(self, click_x: float, click_y: float) -> None:
+        result = self._displayed_result
+        if not self._selection_enabled or result is None:
+            return
+        frame_height, frame_width = result.packet.frame.shape[:2]
+        try:
+            point = map_preview_point_to_frame(
+                click_x,
+                click_y,
+                self.image_label.width(),
+                self.image_label.height(),
+                frame_width,
+                frame_height,
+            )
+        except (TypeError, ValueError):
+            return
+        if point is not None:
+            self.selection_requested.emit(result, point[0], point[1])
 
     def _set_status(self, text: str, state: str) -> None:
         self.status_label.setText(text)
