@@ -7,7 +7,7 @@ import threading
 from PyQt5.QtCore import QObject, QThreadPool, Qt, pyqtSignal, pyqtSlot
 
 from aot.runtime.live_runtime import LiveRuntime
-from aot.ui.background_task import FunctionTask
+from aot.ui.background_task import FunctionTask, submit_function_task
 
 
 class RuntimeController(QObject):
@@ -30,7 +30,6 @@ class RuntimeController(QObject):
         self._busy = False
         self._operation: str | None = None
         self._task: FunctionTask | None = None
-        self._retired_tasks: list[FunctionTask] = []
         self._closed = False
         self._guard = threading.Lock()
         self._worker_start_succeeded = False
@@ -79,7 +78,7 @@ class RuntimeController(QObject):
         task.signals.failed.connect(self._on_failure, Qt.QueuedConnection)
         self._task = task
         self._emit_controls()
-        self._pool.start(task)
+        submit_function_task(self._pool, task)
 
     @pyqtSlot(object)
     def _on_success(self, _result) -> None:
@@ -104,11 +103,6 @@ class RuntimeController(QObject):
             self.failed.emit("Unable to stop live view")
 
     def _finish_operation(self) -> None:
-        if self._task is not None:
-            self._retired_tasks.append(self._task)
-            # Commands are serialized. By the third completion, the oldest
-            # runnable has necessarily returned; retain only a fixed tail.
-            del self._retired_tasks[:-2]
         self._busy = False
         self._task = None
         self._operation = None
@@ -134,5 +128,5 @@ class RuntimeController(QObject):
             cleanup = FunctionTask(self._runtime.stop)
             cleanup.cancel_callbacks()
             self._task = cleanup
-            self._pool.start(cleanup)
+            submit_function_task(self._pool, cleanup)
         self._emit_controls()
