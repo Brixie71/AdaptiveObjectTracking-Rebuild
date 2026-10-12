@@ -137,7 +137,7 @@ def load_model_manifest(path: Path) -> ModelManifest:
     if not isinstance(raw_models, list):
         raise ModelManifestError(f"models must be a list in {path}")
     models = tuple(_parse_model(item, path) for item in raw_models)
-    model_ids = [model.model_id for model in models]
+    model_ids = [model.model_id.casefold() for model in models]
     if len(model_ids) != len(set(model_ids)):
         raise ModelManifestError(f"Duplicate model_id in {path}")
     return ModelManifest(schema_version=1, models=models)

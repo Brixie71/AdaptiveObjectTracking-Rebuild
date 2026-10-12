@@ -42,6 +42,18 @@ class CaptureRuntimeConfig:
 
 
 @dataclass(frozen=True)
+class DetectionConfig:
+    """Detector selection, thresholds, and downstream class policy."""
+
+    enabled: bool = False
+    model_id: str | None = None
+    confidence_threshold: float = 0.25
+    iou_threshold: float = 0.70
+    max_detections: int = 300
+    allowed_classes: tuple[str, ...] = ("person",)
+
+
+@dataclass(frozen=True)
 class CameraSourceConfig:
     """Non-sensitive configuration for one camera or video source."""
 
@@ -68,3 +80,4 @@ class AppSettings:
     compute: ComputeConfig
     sources: tuple[CameraSourceConfig, ...]
     capture: CaptureRuntimeConfig = CaptureRuntimeConfig()
+    detection: DetectionConfig = DetectionConfig()

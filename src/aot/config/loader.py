@@ -17,6 +17,7 @@ from .types import (
     CaptureRuntimeConfig,
     ComputeConfig,
     ComputePreference,
+    DetectionConfig,
     SourceType,
 )
 
@@ -152,6 +153,91 @@ def _load_capture(value: Any, path: Path) -> CaptureRuntimeConfig:
     )
 
 
+def _unit_interval(value: Any, field: str, path: Path) -> float:
+    number = _positive_number(value, field, path)
+    if number > 1.0:
+        raise ConfigError(f"{field} must be at most 1.0 in {path}")
+    return number
+
+
+def _load_detection(value: Any, path: Path) -> DetectionConfig:
+    if value is None:
+        return DetectionConfig()
+    if not isinstance(value, dict):
+        raise ConfigError(f"detection must be a mapping in {path}")
+    _reject_unknown(
+        value,
+        {
+            "enabled",
+            "model_id",
+            "confidence_threshold",
+            "iou_threshold",
+            "max_detections",
+            "allowed_classes",
+        },
+        path,
+        "detection",
+    )
+
+    enabled = value.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"detection.enabled must be true or false in {path}")
+
+    raw_model_id = value.get("model_id")
+    if raw_model_id is None:
+        model_id = None
+    elif isinstance(raw_model_id, str) and raw_model_id.strip():
+        model_id = raw_model_id.strip()
+    else:
+        raise ConfigError(f"detection.model_id must be null or a nonblank string in {path}")
+    if enabled and model_id is None:
+        raise ConfigError(f"detection.model_id is required when detection is enabled in {path}")
+
+    raw_classes = value.get("allowed_classes", ["person"])
+    if not isinstance(raw_classes, list):
+        raise ConfigError(f"detection.allowed_classes must be a list in {path}")
+    allowed_classes: list[str] = []
+    normalized: set[str] = set()
+    for item in raw_classes:
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigError(
+                f"detection.allowed_classes entries must be nonblank strings in {path}"
+            )
+        label = item.strip()
+        key = label.casefold()
+        if key in normalized:
+            raise ConfigError(
+                f"detection.allowed_classes entries must be unique ignoring case in {path}"
+            )
+        normalized.add(key)
+        allowed_classes.append(label)
+    if enabled and not allowed_classes:
+        raise ConfigError(
+            f"detection.allowed_classes must not be empty when detection is enabled in {path}"
+        )
+
+    return DetectionConfig(
+        enabled=enabled,
+        model_id=model_id,
+        confidence_threshold=_unit_interval(
+            value.get("confidence_threshold", 0.25),
+            "detection.confidence_threshold",
+            path,
+        ),
+        iou_threshold=_unit_interval(
+            value.get("iou_threshold", 0.70),
+            "detection.iou_threshold",
+            path,
+        ),
+        max_detections=_positive_integer(
+            value.get("max_detections", 300),
+            "detection.max_detections",
+            path,
+        ),
+        allowed_classes=tuple(allowed_classes),
+    )
+
+
 def _load_source(value: Any, path: Path) -> CameraSourceConfig:
     if not isinstance(value, dict):
         raise ConfigError(f"Each source in {path} must be a mapping")
@@ -254,7 +340,14 @@ def load_settings(
     cameras = _load_mapping(cameras_path)
     _reject_unknown(
         app,
-        {"schema_version", "runtime_dir", "log_level", "compute", "capture"},
+        {
+            "schema_version",
+            "runtime_dir",
+            "log_level",
+            "compute",
+            "capture",
+            "detection",
+        },
         app_path,
         "application configuration",
     )
@@ -285,6 +378,7 @@ def load_settings(
         compute=_load_compute(app.get("compute"), app_path),
         sources=sources,
         capture=_load_capture(app.get("capture"), app_path),
+        detection=_load_detection(app.get("detection"), app_path),
     )
 
 

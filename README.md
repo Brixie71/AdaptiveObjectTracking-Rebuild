@@ -82,3 +82,58 @@ python -m pytest tests/hardware/test_camera_sources.py -v
 ```
 
 Optional `AOT_HARDWARE_FRAME_COUNT` and `AOT_HARDWARE_TIMEOUT_SECONDS` values control the live sample size and concurrent wait. Do not put URLs, usernames, passwords, or query tokens in command arguments, source IDs, or committed YAML. Gate 2 does not claim live USB/RTSP acceptance until these checks pass on named hardware.
+
+## Gate 3 detection and class allowlist
+
+Gate 3 adds immutable project-owned detection records, verified model-artifact
+resolution, a YOLOv8 adapter, and class-name allowlist enforcement. The
+allowlist supports both people and generic objects and is applied inside the
+detector before any result can reach tracking, ReID, persistence, or the UI.
+
+The checked-in application example is intentionally safe for a clean checkout:
+
+```yaml
+detection:
+  enabled: false
+  model_id: null
+  confidence_threshold: 0.25
+  iou_threshold: 0.70
+  max_detections: 300
+  allowed_classes:
+    - person
+    - backpack
+    - bottle
+```
+
+Class names are matched case-insensitively against the selected model and must
+be unique. Enabling detection requires a nonblank `model_id`, a non-empty
+allowlist, and a matching `detector` declaration in `models/manifest.yaml`.
+Before Ultralytics receives a path, the application verifies that the artifact
+is a regular file contained under `models/` and that its bytes match the
+manifest's SHA-256. The compute device is the CPU or CUDA choice resolved by
+the Gate 1 diagnostic; the detector does not independently change devices.
+
+Run automated and offline acceptance from the repository root:
+
+```powershell
+python -m pytest -q
+python -m pytest tests/offline/test_gate3_detection_acceptance.py -v
+python -m pip check
+python scripts/check_environment.py --json
+```
+
+After deliberately provisioning and declaring an approved detector artifact as
+described in `models/README.md`, enable its model ID in a local application
+configuration and run the reusable Hardware Testing probe:
+
+```powershell
+python scripts/probe_detector.py --app-config config/app.local.yaml --model-manifest models/manifest.yaml --models-dir models --json
+```
+
+The probe uses a synthetic 640x480 BGR frame and reports aggregate load and
+inference compatibility. A successful empty detection result is valid for that
+check and does not establish accuracy. The default suite uses injected
+deterministic backends and requires no model weights, camera, network, GUI, or
+CUDA device. Gate 3 does not implement target selection, local tracking,
+encoders, cross-camera identity, persistence, saved profiles, retention, or the
+PyQt UI.

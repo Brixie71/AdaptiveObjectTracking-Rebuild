@@ -101,6 +101,29 @@ models:
     assert "duplicate" in str(error.value)
 
 
+def test_model_ids_are_unique_ignoring_case_and_whitespace(tmp_path) -> None:
+    path = _write_manifest(
+        tmp_path,
+        """\
+schema_version: 1
+models:
+  - model_id: Detector
+    role: detector
+    path: first.pt
+    source: local
+  - model_id: detector
+    role: detector
+    path: second.pt
+    source: local
+""",
+    )
+
+    with pytest.raises(ModelManifestError) as error:
+        load_model_manifest(path)
+
+    assert "duplicate" in str(error.value).lower()
+
+
 @pytest.mark.parametrize(
     "unsafe_path",
     ["C:/models/model.pt", "/models/model.pt", "../historical/model.pt", "models/../../model.pt"],

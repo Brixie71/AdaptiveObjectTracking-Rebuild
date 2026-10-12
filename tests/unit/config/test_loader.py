@@ -86,6 +86,80 @@ def test_capture_policy_uses_bounded_runtime_defaults(tmp_path) -> None:
     assert settings.capture.shutdown_timeout_seconds == 5.0
 
 
+def test_detection_policy_uses_safe_disabled_defaults(tmp_path) -> None:
+    app_path, cameras_path = _write_configs(tmp_path)
+
+    settings = load_settings(app_path, cameras_path)
+
+    assert settings.detection.enabled is False
+    assert settings.detection.model_id is None
+    assert settings.detection.confidence_threshold == 0.25
+    assert settings.detection.iou_threshold == 0.70
+    assert settings.detection.max_detections == 300
+    assert settings.detection.allowed_classes == ("person",)
+
+
+def test_detection_policy_loads_people_and_generic_object_classes(tmp_path) -> None:
+    app = VALID_APP + """\
+detection:
+  enabled: true
+  model_id: yolov8n-coco
+  confidence_threshold: 0.4
+  iou_threshold: 0.6
+  max_detections: 25
+  allowed_classes:
+    - person
+    - backpack
+    - bottle
+"""
+    app_path, cameras_path = _write_configs(tmp_path, app=app)
+
+    detection = load_settings(app_path, cameras_path).detection
+
+    assert detection.enabled is True
+    assert detection.model_id == "yolov8n-coco"
+    assert detection.confidence_threshold == 0.4
+    assert detection.iou_threshold == 0.6
+    assert detection.max_detections == 25
+    assert detection.allowed_classes == ("person", "backpack", "bottle")
+
+
+@pytest.mark.parametrize(
+    "detection",
+    [
+        "  unknown: true",
+        "  enabled: yes",
+        "  enabled: true",
+        "  enabled: true\n  model_id: ''",
+        "  enabled: true\n  model_id: 8",
+        "  model_id: []",
+        "  enabled: true\n  model_id: yolov8n-coco\n  allowed_classes: []",
+        "  allowed_classes: person",
+        "  allowed_classes: [person, '  PERSON  ']",
+        "  allowed_classes: [person, '   ']",
+        "  allowed_classes: [person, 1]",
+        "  confidence_threshold: true",
+        "  confidence_threshold: 0",
+        "  confidence_threshold: 1.1",
+        "  confidence_threshold: .nan",
+        "  iou_threshold: false",
+        "  iou_threshold: -0.1",
+        "  iou_threshold: .inf",
+        "  max_detections: true",
+        "  max_detections: 0",
+        "  max_detections: 1.5",
+    ],
+)
+def test_detection_policy_rejects_invalid_values(tmp_path, detection: str) -> None:
+    app = VALID_APP + "detection:\n" + detection + "\n"
+    app_path, cameras_path = _write_configs(tmp_path, app=app)
+
+    with pytest.raises(ConfigError) as error:
+        load_settings(app_path, cameras_path)
+
+    assert "detection" in str(error.value).lower()
+
+
 @pytest.mark.parametrize(
     "capture",
     [

@@ -9,3 +9,13 @@ capture:
   reconnect_initial_seconds: 0.25
   reconnect_max_seconds: 5.0
   shutdown_timeout_seconds: 5.0
+detection:
+  enabled: false
+  model_id: null
+  confidence_threshold: 0.25
+  iou_threshold: 0.70
+  max_detections: 300
+  allowed_classes:
+    - person
+    - backpack
+    - bottle
