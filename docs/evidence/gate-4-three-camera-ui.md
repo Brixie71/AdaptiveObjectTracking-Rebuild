@@ -9,6 +9,8 @@
 
 **Implementation commit before acceptance documentation:** `8469667`
 
+**Final review fix commit:** `f717abb`
+
 **Scope:** Native three-slot PyQt5 presentation, immutable runtime snapshots,
 single-worker detector scheduling, asynchronous Start/Stop, source health,
 Settings Hardware Testing, sanitized composition, and deterministic offline
