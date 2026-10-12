@@ -27,9 +27,12 @@ __all__ = [
     "ModelManifest",
     "ModelManifestError",
     "ModelSpec",
+    "ModelArtifactError",
+    "ResolvedModelArtifact",
     "SourceType",
     "load_settings",
     "load_model_manifest",
+    "resolve_model_artifact",
     "resolve_rtsp_url",
 ]
 
@@ -43,6 +46,10 @@ def __getattr__(name: str) -> Any:
         from . import model_manifest
 
         value = getattr(model_manifest, name)
+    elif name in {"ModelArtifactError", "ResolvedModelArtifact", "resolve_model_artifact"}:
+        from . import model_store
+
+        value = getattr(model_store, name)
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     globals()[name] = value
