@@ -10,6 +10,8 @@ venv/
 *.secret
 config/cameras.local.yaml
 runtime/
+!src/aot/runtime/
+!tests/unit/runtime/
 logs/
 .vscode/
 .idea/
