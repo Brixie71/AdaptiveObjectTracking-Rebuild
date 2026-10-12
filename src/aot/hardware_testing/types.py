@@ -71,6 +71,40 @@ class SourceTestResult:
 
 
 @dataclass(frozen=True)
+class DetectorTestResult:
+    """Sanitized detector-loading and inference benchmark result."""
+
+    model_id: str
+    status: HardwareTestStatus
+    device: str
+    warmup_runs: int
+    measured_runs: int
+    successful_runs: int
+    mean_inference_ms: float | None
+    p95_inference_ms: float | None
+    detection_count: int
+    started_at_utc: datetime
+    ended_at_utc: datetime
+    summary: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model_id": self.model_id,
+            "status": self.status.value,
+            "device": self.device,
+            "warmup_runs": self.warmup_runs,
+            "measured_runs": self.measured_runs,
+            "successful_runs": self.successful_runs,
+            "mean_inference_ms": self.mean_inference_ms,
+            "p95_inference_ms": self.p95_inference_ms,
+            "detection_count": self.detection_count,
+            "started_at_utc": self.started_at_utc.isoformat(),
+            "ended_at_utc": self.ended_at_utc.isoformat(),
+            "summary": self.summary,
+        }
+
+
+@dataclass(frozen=True)
 class UsbDeviceCandidate:
     device_index: int
     width: int
