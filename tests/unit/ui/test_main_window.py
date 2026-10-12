@@ -25,6 +25,7 @@ def source_snapshot(source_id: str) -> SourceRuntimeSnapshot:
 class WindowRuntime:
     def __init__(self, sources=("a", "b")) -> None:
         self.running = False
+        self.requires_cleanup = False
         self.source_ids = sources
         self.snapshot_calls = 0
         self.start_calls = 0
@@ -129,3 +130,56 @@ def test_close_during_blocked_start_keeps_event_loop_responsive(qtbot) -> None:
 
     assert runtime.start_calls == 1
     assert runtime.stop_calls == 1
+
+
+def test_window_displays_sanitized_lifecycle_failure(qtbot) -> None:
+    class FailingRuntime(WindowRuntime):
+        def start(self):
+            raise RuntimeError("PRIVATE-MODEL-PATH")
+
+    window = MainWindow(FailingRuntime(("one",)))
+    qtbot.addWidget(window)
+    window.start_button.click()
+    qtbot.waitUntil(lambda: bool(window.operation_status_label.text()))
+
+    assert window.operation_status_label.text() == "Unable to start live view"
+    assert "PRIVATE" not in window.operation_status_label.text()
+    window.close()
+
+
+def test_settings_dialog_is_reused_while_probe_remains_active(qtbot) -> None:
+    runtime = WindowRuntime(("one",))
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    from aot.config.types import CameraSourceConfig, SourceType
+    from aot.ui.settings_dialog import SettingsDialog
+
+    sources = (CameraSourceConfig("one", "One", SourceType.USB, True, device_index=0),)
+
+    def probe(_sources):
+        calls.append(1)
+        entered.set()
+        release.wait(1.0)
+        return ()
+
+    def settings_factory(parent):
+        return SettingsDialog(sources, probe, lambda: (), lambda: None, parent)
+
+    window = MainWindow(runtime, settings_factory=settings_factory)
+    qtbot.addWidget(window)
+    window.show()
+    window.open_settings()
+    first = window._settings_window
+    first.hardware_testing.run_sources_button.click()
+    assert entered.wait(0.5)
+    first.close()
+    window.open_settings()
+
+    assert window._settings_window is first
+    window._settings_window.hardware_testing.run_sources_button.click()
+    assert calls == [1]
+    release.set()
+    qtbot.waitUntil(lambda: first.hardware_testing.run_sources_button.isEnabled())
+    window.close()

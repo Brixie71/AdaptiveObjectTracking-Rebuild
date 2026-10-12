@@ -11,6 +11,7 @@ from aot.ui.controller import RuntimeController
 class BlockingRuntime:
     def __init__(self) -> None:
         self.running = False
+        self.requires_cleanup = False
         self.start_entered = threading.Event()
         self.start_release = threading.Event()
         self.stop_entered = threading.Event()
@@ -47,7 +48,7 @@ def test_controller_serializes_commands_and_runs_start_off_gui_thread(qapp, qtbo
     assert runtime.start_entered.wait(0.5)
     assert controller.busy is True
     assert controller.can_start is False
-    assert controller.can_stop is False
+    assert controller.can_stop is True
     assert controller.request_start() is False
     assert runtime.start_calls == 1
     runtime.start_release.set()
@@ -100,3 +101,48 @@ def test_close_during_blocked_start_stops_runtime_without_late_signals(qapp, qtb
 
     assert len(started) == 0
     assert len(stopped) == 0
+
+
+def test_stop_during_start_defers_cleanup_without_emitting_started(qapp, qtbot) -> None:
+    runtime = BlockingRuntime()
+    controller = RuntimeController(runtime)
+    started = QSignalSpy(controller.started)
+    stopped = QSignalSpy(controller.stopped)
+    controller.request_start()
+    assert runtime.start_entered.wait(0.5)
+
+    assert controller.request_stop() is True
+    assert controller.can_stop is False
+    runtime.start_release.set()
+    runtime.stop_release.set()
+    qtbot.waitUntil(lambda: len(stopped) == 1)
+
+    assert runtime.stop_calls == 1
+    assert len(started) == 0
+    controller.close()
+
+
+def test_failed_stop_keeps_retry_available_and_close_retries_cleanup(qapp, qtbot) -> None:
+    class RetryRuntime(BlockingRuntime):
+        def stop(self):
+            self.stop_calls += 1
+            self.running = False
+            if self.stop_calls == 1:
+                self.requires_cleanup = True
+                raise RuntimeError("PRIVATE-SHUTDOWN")
+            self.requires_cleanup = False
+
+    runtime = RetryRuntime()
+    runtime.running = True
+    controller = RuntimeController(runtime)
+    failures = QSignalSpy(controller.failed)
+
+    assert controller.request_stop() is True
+    qtbot.waitUntil(lambda: len(failures) == 1)
+    assert controller.can_start is False
+    assert controller.can_stop is True
+    controller.close()
+    qtbot.waitUntil(lambda: runtime.stop_calls == 2)
+
+    assert controller.wait_for_done(500) is False
+    assert runtime.requires_cleanup is False

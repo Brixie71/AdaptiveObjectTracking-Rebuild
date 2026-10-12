@@ -40,7 +40,7 @@ python -m pytest tests/offline/test_three_source_capture.py tests/offline/test_g
 # exit 0; 3 passed
 
 python -m pytest -q
-# exit 0; 364 passed, 1 skipped
+# exit 0; 371 passed, 1 skipped
 
 python -m pip check
 # exit 0; No broken requirements found.
@@ -65,6 +65,14 @@ overlays, fixed three-slot mapping, raw-preview rendering when detection is
 disabled, asynchronous lifecycle/probe calls, duplicate-job rejection,
 stale/late callback rejection, one-to-three source validation, fresh restart
 ownership, and sanitized application-boundary failures.
+
+The final whole-branch review found no Critical issues. Its six Important
+findings were corrected with regressions covering process-safe blocked-task
+teardown, retained and retryable partial-start/failed-stop cleanup, deferred
+Stop during startup, one application-owned Settings/probe surface, serialized
+process-global detector output isolation, and visible sanitized lifecycle
+failures. The focused review-fix suite passed 24 tests before the complete
+suite was rerun.
 
 ## Hardware and model proof boundary
 

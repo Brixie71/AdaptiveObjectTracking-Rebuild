@@ -211,6 +211,7 @@ def test_stuck_processing_still_stops_capture_and_does_not_close_detector() -> N
         runtime.stop()
 
     assert caught.value.source_ids == ("a", "b")
+    assert runtime.requires_cleanup is True
     assert events[-1] == "capture.stop"
     assert detectors[0].closed is False
     assert "PRIVATE" not in str(caught.value)
@@ -218,6 +219,7 @@ def test_stuck_processing_still_stops_capture_and_does_not_close_detector() -> N
     processors[0].stuck = False
     runtime.stop()
     assert detectors[0].closed is True
+    assert runtime.requires_cleanup is False
 
 
 def test_capture_shutdown_error_is_sanitized_after_other_cleanup() -> None:
@@ -234,3 +236,42 @@ def test_capture_shutdown_error_is_sanitized_after_other_cleanup() -> None:
     assert detectors[0].closed is True
     assert events.index("processing.join") < events.index("capture.stop")
     assert events.index("capture.stop") < events.index("detector.close")
+
+
+def test_partial_capture_start_is_cleaned_and_failed_cleanup_is_retained() -> None:
+    events = []
+
+    class PartialCapture(FakeCapture):
+        def __init__(self):
+            super().__init__(events, ("a",))
+            self.stop_calls = 0
+
+        def start(self, _configured_sources):
+            events.append("capture.start.partial")
+            raise RuntimeError("PRIVATE-START")
+
+        def stop(self):
+            self.stop_calls += 1
+            events.append("capture.stop.partial")
+            if self.stop_calls == 1:
+                raise ManagerShutdownError(["a"])
+
+    capture = PartialCapture()
+    factory_calls = []
+    runtime = LiveRuntime(
+        settings(source("a")),
+        lambda _config: factory_calls.append(1) or capture,
+        lambda: None,
+    )
+
+    with pytest.raises(RuntimeError, match="failed to start"):
+        runtime.start()
+    assert capture.stop_calls == 1
+    assert runtime.requires_cleanup is True
+    with pytest.raises(RuntimeError, match="lifecycle"):
+        runtime.start()
+    assert len(factory_calls) == 1
+
+    runtime.stop()
+    assert capture.stop_calls == 2
+    assert runtime.requires_cleanup is False

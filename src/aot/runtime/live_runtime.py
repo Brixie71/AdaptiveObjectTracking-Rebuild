@@ -65,6 +65,15 @@ class LiveRuntime:
         with self._lock:
             return self._running
 
+    @property
+    def requires_cleanup(self) -> bool:
+        """Report whether a previous lifecycle operation retained resources."""
+        with self._lock:
+            return any(
+                item is not None
+                for item in (self._capture, self._processing, self._detector)
+            ) and not self._running
+
     def start(self) -> None:
         self._validate()
         with self._lock:
@@ -80,11 +89,9 @@ class LiveRuntime:
         capture: CaptureManager | None = None
         detector: Detector | None = None
         processing: ProcessingWorker | None = None
-        capture_started = False
         try:
             capture = self._capture_manager_factory(self._settings.capture)
             capture.start(self._sources)
-            capture_started = True
             if self._settings.detection.enabled:
                 detector = self._detector_factory()
             source_ids = tuple(source.source_id for source in self._sources)
@@ -107,17 +114,28 @@ class LiveRuntime:
                 processing_stopped = processing.join(
                     self._settings.capture.shutdown_timeout_seconds
                 )
-            if capture_started and capture is not None:
+            capture_stopped = capture is None
+            if capture is not None:
                 try:
                     capture.stop()
                 except Exception:
-                    pass
+                    capture_stopped = False
+                else:
+                    capture_stopped = True
+            detector_closed = detector is None
             if detector is not None and processing_stopped:
                 try:
                     detector.close()
                 except Exception:
-                    pass
+                    detector_closed = False
+                else:
+                    detector_closed = True
             with self._lock:
+                self._capture = None if capture_stopped else capture
+                self._processing = None if processing_stopped else processing
+                self._detector = None if detector_closed else detector
+                self._results = None
+                self._running = False
                 self._transitioning = False
             raise RuntimeError("Live runtime failed to start") from None
 

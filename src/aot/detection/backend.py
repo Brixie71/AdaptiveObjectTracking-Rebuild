@@ -6,24 +6,29 @@ from collections.abc import Iterable, Mapping, Sequence
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import io
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
 
 
+_OUTPUT_ISOLATION_LOCK = threading.RLock()
+
+
 @contextmanager
 def isolated_backend_output():
     """Contain synchronous third-party console and Ultralytics logger output."""
 
-    logger = logging.getLogger("ultralytics")
-    previously_disabled = logger.disabled
-    logger.disabled = True
-    try:
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            yield
-    finally:
-        logger.disabled = previously_disabled
+    with _OUTPUT_ISOLATION_LOCK:
+        logger = logging.getLogger("ultralytics")
+        previously_disabled = logger.disabled
+        logger.disabled = True
+        try:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                yield
+        finally:
+            logger.disabled = previously_disabled
 
 
 class YoloBackend(Protocol):

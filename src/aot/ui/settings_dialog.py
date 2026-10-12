@@ -32,5 +32,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.tabs)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        self.hardware_testing.shutdown()
         event.accept()
+
+    def shutdown(self) -> None:
+        """Cancel late UI callbacks when the owning application closes."""
+        self.hardware_testing.shutdown()

@@ -9,6 +9,7 @@ from PyQt5.QtGui import QCloseEvent
 from PyQt5.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QPushButton,
     QVBoxLayout,
@@ -49,6 +50,9 @@ class MainWindow(QMainWindow):
         controls.addStretch(1)
         controls.addWidget(self.settings_button)
         root.addLayout(controls)
+        self.operation_status_label = QLabel("", central)
+        self.operation_status_label.setObjectName("operationStatusLabel")
+        root.addWidget(self.operation_status_label)
 
         grid = QGridLayout()
         self.camera_panels = tuple(CameraPanel(central) for _ in range(3))
@@ -64,6 +68,9 @@ class MainWindow(QMainWindow):
         self.controller.controls_changed.connect(self._apply_controls)
         self.controller.started.connect(self.refresh_once)
         self.controller.stopped.connect(self.refresh_once)
+        self.controller.started.connect(lambda: self.operation_status_label.clear())
+        self.controller.stopped.connect(lambda: self.operation_status_label.clear())
+        self.controller.failed.connect(self.operation_status_label.setText)
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(refresh_interval_ms)
@@ -96,16 +103,15 @@ class MainWindow(QMainWindow):
             self._settings_window.activateWindow()
             return
         dialog = self._settings_factory(self)
-        dialog.setAttribute(__import__("PyQt5.QtCore").QtCore.Qt.WA_DeleteOnClose, True)
-        dialog.destroyed.connect(self._settings_destroyed)
         self._settings_window = dialog
         dialog.show()
 
-    def _settings_destroyed(self, _object=None) -> None:
-        self._settings_window = None
-
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         self._refresh_timer.stop()
+        if self._settings_window is not None:
+            shutdown = getattr(self._settings_window, "shutdown", None)
+            if callable(shutdown):
+                shutdown()
         self.controller.close()
         event.accept()
 

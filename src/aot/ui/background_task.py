@@ -25,6 +25,7 @@ class FunctionTask(QRunnable):
         self._function = function
         self._callback_lock = threading.Lock()
         self._callbacks_enabled = True
+        self._done = threading.Event()
         self.succeeded: bool | None = None
         # Python owns the runnable and its signal object.  Deleting the wrapper
         # from its worker thread can strand Qt while queued callbacks unwind.
@@ -39,6 +40,9 @@ class FunctionTask(QRunnable):
             return self._callbacks_enabled
 
     def run(self) -> None:
+        threading.Thread(target=self._execute, daemon=True).start()
+
+    def _execute(self) -> None:
         try:
             result = self._function()
         except Exception:
@@ -50,7 +54,12 @@ class FunctionTask(QRunnable):
             if self._can_emit():
                 self.signals.succeeded.emit(result)
         finally:
+            self._done.set()
             self.signals.finished.emit(self)
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Wait for the callable, independently of the Qt worker pool."""
+        return self._done.wait(timeout)
 
 
 class _TaskRegistry(QObject):
